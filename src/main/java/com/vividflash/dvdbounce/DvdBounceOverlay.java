@@ -49,9 +49,11 @@ public class DvdBounceOverlay extends Overlay
 
     /**
      * Frame-time clamp so the image doesn't teleport after a long stall
-     * (client freeze, world hop, laptop resume).
+     * (client freeze, world hop, laptop resume). Generous enough that motion
+     * stays real-time while the client throttles its frame rate when the
+     * window is unfocused or covered.
      */
-    private static final double MAX_FRAME_SECONDS = 0.05;
+    private static final double MAX_FRAME_SECONDS = 0.25;
 
     private final Client client;
     private final DvdBouncePlugin plugin;
@@ -90,7 +92,11 @@ public class DvdBounceOverlay extends Overlay
             return null;
         }
 
-        Dimension canvas = client.getCanvas().getSize();
+        // In stretched mode overlays draw on the pre-stretch surface, whose size
+        // is the real dimensions — the AWT canvas is the post-stretch window.
+        Dimension canvas = client.isStretchedEnabled()
+            ? client.getRealDimensions()
+            : client.getCanvas().getSize();
         int canvasWidth = canvas.width;
         int canvasHeight = canvas.height;
         if (canvasWidth <= 0 || canvasHeight <= 0)
