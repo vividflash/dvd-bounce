@@ -130,9 +130,8 @@ public class DvdBounceOverlay extends Overlay
 
     /**
      * Move the image along its 45-degree path and reflect it off the travel-area
-     * edges. Integrating frame-by-frame (rather than deriving the position from
-     * total elapsed time) keeps motion continuous through canvas resizes and
-     * live config changes.
+     * edges, integrating frame-by-frame so motion stays continuous through
+     * canvas resizes and live config changes.
      */
     private void advancePosition(int travelWidth, int travelHeight)
     {
