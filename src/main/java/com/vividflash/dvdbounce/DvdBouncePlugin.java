@@ -40,7 +40,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 @Slf4j
 @PluginDescriptor(
     name = "DVD Bounce",
-    description = "A picture of your choice bounces around the screen like the classic DVD screensaver. Will hit the corner.",
+    description = "A picture bounces around your client like the DVD screensaver. Will hit the corner.",
     tags = {"dvd", "bounce", "screensaver", "overlay", "fun"}
 )
 public class DvdBouncePlugin extends Plugin
