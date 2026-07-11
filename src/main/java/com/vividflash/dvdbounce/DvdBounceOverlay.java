@@ -104,7 +104,7 @@ public class DvdBounceOverlay extends Overlay
             return null;
         }
 
-        BufferedImage source = plugin.resolveSourceImage();
+        AnimatedImage source = plugin.resolveSourceImage();
         if (source == null)
         {
             return null;
@@ -117,7 +117,10 @@ public class DvdBounceOverlay extends Overlay
 
         advancePosition(canvasWidth - drawWidth, canvasHeight - drawHeight);
 
-        BufferedImage image = config.colourShift() ? tintedFor(source) : source;
+        // Animated sources loop on the wall clock; static ones always return
+        // their single frame.
+        BufferedImage frame = source.frameAt(System.currentTimeMillis());
+        BufferedImage image = config.colourShift() ? tintedFor(frame) : frame;
         graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
             RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y),
@@ -198,8 +201,9 @@ public class DvdBounceOverlay extends Overlay
     }
 
     /**
-     * The source image with the current bounce count's hue rotation applied,
-     * recomputed only when a bounce happens (or the source/toggle changes).
+     * The source frame with the current bounce count's hue rotation applied,
+     * recomputed only when a bounce happens or the frame changes (animated
+     * sources swap frames as they play).
      */
     private BufferedImage tintedFor(BufferedImage source)
     {

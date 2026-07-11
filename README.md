@@ -6,9 +6,10 @@ edges. Will it ever hit the corner?
 
 ## Features
 
-- **Bring your own image** — drop a PNG/JPG into your `.runelite/dvd-bounce`
-  folder (your clan logo, your cat, anything) and put its file name in
-  *Custom image file*. A colourful gradient square is bundled as the default.
+- **Bring your own image** — drop a PNG, JPG, GIF or BMP into your
+  `.runelite/dvd-bounce` folder (your clan logo, your cat, anything) and put
+  its file name in *Custom image file*. Animated GIFs play while they bounce.
+  A colourful gradient square is bundled as the default.
 - **Colour shift** — the image's colours rotate a step on every bounce, just
   like the DVD logo changing colour.
 - **Corner-hit flash** — optional celebratory white flash when the image lands
@@ -26,7 +27,9 @@ edges. Will it ever hit the corner?
 | Colour shift on bounce | on | |
 | Corner-hit flash | off | |
 
-Animated GIFs are not supported — only the first frame is shown.
+Animated GIFs play, looping continuously. To keep memory bounded, frames are
+downscaled to at most 512 px on their longest side and very long animations
+are truncated (at most 150 frames / 64 MB decoded).
 
 ## Photosensitivity warning
 

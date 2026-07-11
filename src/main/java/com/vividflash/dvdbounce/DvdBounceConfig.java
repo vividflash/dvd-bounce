@@ -35,7 +35,7 @@ public interface DvdBounceConfig extends Config
     @ConfigItem(
         keyName = "customImagePath",
         name = "Custom image file",
-        description = "File name of a PNG/JPG inside your .runelite/dvd-bounce folder (created when the plugin starts) to bounce instead of the bundled placeholder. Leave blank for the placeholder.",
+        description = "File name of an image inside your .runelite/dvd-bounce folder (created when the plugin starts) to bounce instead of the bundled placeholder. PNG, JPG, GIF, BMP; animated GIFs play. Leave blank for the placeholder.",
         position = 0
     )
     default String customImageFile()

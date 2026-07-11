@@ -25,9 +25,6 @@
 package com.vividflash.dvdbounce;
 
 import com.google.inject.Provides;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,14 +66,14 @@ public class DvdBouncePlugin extends Plugin
     @Inject
     private OverlayManager overlayManager;
 
-    private BufferedImage bundledPlaceholder;
+    private AnimatedImage bundledPlaceholder;
 
     /**
      * Cache of the last custom image loaded, keyed by its path, so the file is
      * read from disk only when the configured path changes.
      */
     private String cachedCustomPath;
-    private BufferedImage cachedCustomImage;
+    private AnimatedImage cachedCustomImage;
 
     @Override
     protected void startUp()
@@ -108,7 +105,7 @@ public class DvdBouncePlugin extends Plugin
      * otherwise the bundled placeholder. Called from the overlay every frame;
      * disk I/O only happens when the configured file name changes.
      */
-    BufferedImage resolveSourceImage()
+    AnimatedImage resolveSourceImage()
     {
         String customName = config.customImageFile();
         if (customName == null || customName.trim().isEmpty())
@@ -131,10 +128,11 @@ public class DvdBouncePlugin extends Plugin
             File imageFile = resolvePluginFile(name);
             if (imageFile != null && imageFile.isFile())
             {
-                BufferedImage loaded = ImageIO.read(imageFile);
+                AnimatedImage loaded = AnimatedImage.load(imageFile,
+                    MAX_SOURCE_DIMENSION, MAX_SOURCE_DIMENSION);
                 if (loaded != null)
                 {
-                    cachedCustomImage = downscale(loaded);
+                    cachedCustomImage = loaded;
                     return cachedCustomImage;
                 }
             }
@@ -166,27 +164,7 @@ public class DvdBouncePlugin extends Plugin
         }
     }
 
-    private static BufferedImage downscale(BufferedImage source)
-    {
-        int longest = Math.max(source.getWidth(), source.getHeight());
-        if (longest <= MAX_SOURCE_DIMENSION)
-        {
-            return source;
-        }
-
-        double scale = (double) MAX_SOURCE_DIMENSION / longest;
-        int w = Math.max(1, (int) Math.round(source.getWidth() * scale));
-        int h = Math.max(1, (int) Math.round(source.getHeight() * scale));
-        BufferedImage scaled = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = scaled.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g.drawImage(source, 0, 0, w, h, null);
-        g.dispose();
-        return scaled;
-    }
-
-    private BufferedImage loadBundledImage(String resource)
+    private AnimatedImage loadBundledImage(String resource)
     {
         try (InputStream in = getClass().getResourceAsStream(resource))
         {
@@ -195,7 +173,7 @@ public class DvdBouncePlugin extends Plugin
                 log.warn("Bundled {} resource not found on classpath", resource);
                 return null;
             }
-            return ImageIO.read(in);
+            return AnimatedImage.of(ImageIO.read(in));
         }
         catch (IOException e)
         {
