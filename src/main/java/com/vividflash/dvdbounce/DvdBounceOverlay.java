@@ -72,6 +72,20 @@ public class DvdBounceOverlay extends Overlay
     private long cornerFlashStartMs;
 
     /**
+     * How long after a world hop completes before motion resumes, giving the
+     * client a moment to settle.
+     */
+    private static final long RESUME_GRACE_MS = 1200L;
+
+    /**
+     * While paused the logo freezes in place: position, animation frame and
+     * hue stop advancing, so the overlay does no work beyond one cached blit.
+     */
+    private boolean paused;
+    private long resumeAtMs = Long.MAX_VALUE;
+    private long pausedClockMs;
+
+    /**
      * Source frames pre-scaled to the current draw size, so each animation
      * frame is resized once instead of bilinearly rescaled on every render.
      */
@@ -130,11 +144,27 @@ public class DvdBounceOverlay extends Overlay
             (int) Math.round((double) drawWidth * source.getHeight() / source.getWidth()));
         drawHeight = Math.min(drawHeight, canvasHeight);
 
-        advancePosition(canvasWidth - drawWidth, canvasHeight - drawHeight);
+        long nowMs = System.currentTimeMillis();
+        if (paused && nowMs >= resumeAtMs)
+        {
+            paused = false;
+            // No time accrued across the pause: motion resumes from the
+            // frozen spot instead of jumping ahead.
+            lastFrameNanos = 0;
+        }
+
+        if (paused)
+        {
+            lastFrameNanos = 0;
+        }
+        else
+        {
+            advancePosition(canvasWidth - drawWidth, canvasHeight - drawHeight);
+        }
 
         // Animated sources loop on the wall clock; static ones always return
-        // their single frame.
-        BufferedImage frame = source.frameAt(System.currentTimeMillis());
+        // their single frame. While paused the clock freezes too.
+        BufferedImage frame = source.frameAt(paused ? pausedClockMs : nowMs);
         BufferedImage scaled = scaledFor(source, frame, drawWidth, drawHeight);
         BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
         graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y), null);
@@ -142,6 +172,32 @@ public class DvdBounceOverlay extends Overlay
         renderCornerFlash(graphics, canvasWidth, canvasHeight);
 
         return new Dimension(canvasWidth, canvasHeight);
+    }
+
+    /**
+     * Freeze the logo where it is. Repeated calls (hop -> login states) keep
+     * it paused; the pending resume, if any, is cancelled.
+     */
+    void pause()
+    {
+        if (!paused)
+        {
+            paused = true;
+            pausedClockMs = System.currentTimeMillis();
+        }
+        resumeAtMs = Long.MAX_VALUE;
+    }
+
+    /**
+     * Arm the delayed resume after a completed hop/login. Only the first
+     * LOGGED_IN after a pause arms it; harmless no-op while unpaused.
+     */
+    void scheduleResume()
+    {
+        if (paused && resumeAtMs == Long.MAX_VALUE)
+        {
+            resumeAtMs = System.currentTimeMillis() + RESUME_GRACE_MS;
+        }
     }
 
     /**

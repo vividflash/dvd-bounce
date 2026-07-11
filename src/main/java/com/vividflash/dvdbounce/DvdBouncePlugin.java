@@ -31,8 +31,10 @@ import java.io.InputStream;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -100,6 +102,31 @@ public class DvdBouncePlugin extends Plugin
     DvdBounceConfig provideConfig(ConfigManager configManager)
     {
         return configManager.getConfig(DvdBounceConfig.class);
+    }
+
+    /**
+     * Pause the bounce while the client is busy with a world hop (or login /
+     * reconnect) and resume shortly after, so the overlay adds no work while
+     * the game is already struggling. Ordinary region loads while running
+     * around stay untouched.
+     */
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event)
+    {
+        switch (event.getGameState())
+        {
+            case HOPPING:
+            case LOGGING_IN:
+            case LOGIN_SCREEN:
+            case CONNECTION_LOST:
+                overlay.pause();
+                break;
+            case LOGGED_IN:
+                overlay.scheduleResume();
+                break;
+            default:
+                break;
+        }
     }
 
     /**
