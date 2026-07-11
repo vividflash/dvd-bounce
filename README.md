@@ -6,9 +6,9 @@ edges. Will it ever hit the corner?
 
 ## Features
 
-- **Bring your own image** — point *Custom image path* at any PNG/JPG on your
-  computer (your clan logo, your cat, anything). A colourful gradient square is
-  bundled as the default.
+- **Bring your own image** — drop a PNG/JPG into your `.runelite/dvd-bounce`
+  folder (your clan logo, your cat, anything) and put its file name in
+  *Custom image file*. A colourful gradient square is bundled as the default.
 - **Colour shift** — the image's colours rotate a step on every bounce, just
   like the DVD logo changing colour.
 - **Corner-hit flash** — optional celebratory white flash when the image lands
@@ -20,7 +20,7 @@ edges. Will it ever hit the corner?
 
 | Setting | Default | Notes |
 |---|---|---|
-| Custom image path | *(blank)* | Absolute path, e.g. `C:\Users\you\Pictures\logo.png`. Blank = bundled placeholder. Falls back to the placeholder if the file can't be read. |
+| Custom image file | *(blank)* | File name inside your `.runelite/dvd-bounce` folder (created when the plugin starts), e.g. `logo.png`. Blank = bundled placeholder. Falls back to the placeholder if the file can't be read. |
 | Image size (px) | 112 | Width; height follows the image's aspect ratio. |
 | Speed (px/s) | 208 | |
 | Colour shift on bounce | on | |

@@ -34,6 +34,7 @@ import java.io.InputStream;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -51,6 +52,13 @@ public class DvdBouncePlugin extends Plugin
      * the user points the plugin at a full-size photo.
      */
     private static final int MAX_SOURCE_DIMENSION = 512;
+
+    /**
+     * All file I/O is restricted to this plugin-specific subfolder under
+     * .runelite (Plugin Hub requirement). Created on startup so users can
+     * drop their image into it.
+     */
+    private static final File PLUGIN_DIR = new File(RuneLite.RUNELITE_DIR, "dvd-bounce");
 
     @Inject
     private DvdBounceConfig config;
@@ -73,6 +81,10 @@ public class DvdBouncePlugin extends Plugin
     @Override
     protected void startUp()
     {
+        if (!PLUGIN_DIR.exists() && !PLUGIN_DIR.mkdirs())
+        {
+            log.warn("Could not create plugin folder {}", PLUGIN_DIR);
+        }
         bundledPlaceholder = loadBundledImage("placeholder.png");
         overlayManager.add(overlay);
     }
@@ -94,30 +106,30 @@ public class DvdBouncePlugin extends Plugin
     /**
      * Resolve the image to bounce: the custom image if configured and loadable,
      * otherwise the bundled placeholder. Called from the overlay every frame;
-     * disk I/O only happens when the configured path changes.
+     * disk I/O only happens when the configured file name changes.
      */
     BufferedImage resolveSourceImage()
     {
-        String customPath = config.customImagePath();
-        if (customPath == null || customPath.trim().isEmpty())
+        String customName = config.customImageFile();
+        if (customName == null || customName.trim().isEmpty())
         {
             return bundledPlaceholder;
         }
 
-        String path = customPath.trim();
-        if (path.equals(cachedCustomPath))
+        String name = customName.trim();
+        if (name.equals(cachedCustomPath))
         {
             return cachedCustomImage != null ? cachedCustomImage : bundledPlaceholder;
         }
 
-        // Remember the attempted path even on failure so a broken path is not
+        // Remember the attempted name even on failure so a broken file is not
         // re-read from disk every frame.
-        cachedCustomPath = path;
+        cachedCustomPath = name;
         cachedCustomImage = null;
         try
         {
-            File imageFile = new File(path);
-            if (imageFile.isFile())
+            File imageFile = resolvePluginFile(name);
+            if (imageFile != null && imageFile.isFile())
             {
                 BufferedImage loaded = ImageIO.read(imageFile);
                 if (loaded != null)
@@ -126,13 +138,32 @@ public class DvdBouncePlugin extends Plugin
                     return cachedCustomImage;
                 }
             }
-            log.warn("Could not load custom image, falling back to placeholder: {}", path);
+            log.warn("Could not load custom image from {}, falling back to placeholder: {}", PLUGIN_DIR, name);
         }
         catch (IOException e)
         {
-            log.warn("Failed to read custom image, falling back to placeholder: {}", path, e);
+            log.warn("Failed to read custom image, falling back to placeholder: {}", name, e);
         }
         return bundledPlaceholder;
+    }
+
+    /**
+     * Resolve a configured file name inside the plugin's .runelite subfolder.
+     * Only files within that folder are ever read; a name that escapes it
+     * (e.g. via "..") resolves to null.
+     */
+    private static File resolvePluginFile(String name)
+    {
+        try
+        {
+            File file = new File(PLUGIN_DIR, name);
+            String base = PLUGIN_DIR.getCanonicalPath() + File.separator;
+            return file.getCanonicalPath().startsWith(base) ? file : null;
+        }
+        catch (IOException e)
+        {
+            return null;
+        }
     }
 
     private static BufferedImage downscale(BufferedImage source)
