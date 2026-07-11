@@ -50,17 +50,12 @@ public class DvdBounceOverlay extends Overlay
     private static final long CORNER_FLASH_DURATION_MS = 400L;
 
     /**
-     * Frame-time clamp so motion stays smooth while the client throttles its
-     * frame rate when the window is unfocused or covered.
+     * Frames at most this long are ordinary rendering; only they can signal a
+     * corner hit. Across longer gaps (world hop, client freeze) the position
+     * still advances exactly, but per-axis bounces happened at different
+     * moments, so "both axes bounced" no longer means a corner was struck.
      */
-    private static final double MAX_FRAME_SECONDS = 0.25;
-
-    /**
-     * Frame gaps longer than this are a stall (world hop, client freeze,
-     * laptop resume): motion pauses for that gap instead of lurching ahead
-     * while the client catches up.
-     */
-    private static final double STALL_SECONDS = 0.5;
+    private static final double NORMAL_FRAME_SECONDS = 0.25;
 
     private final Client client;
     private final DvdBouncePlugin plugin;
@@ -150,15 +145,15 @@ public class DvdBounceOverlay extends Overlay
     }
 
     /**
-     * Move the image along its 45-degree path and reflect it off the travel-area
-     * edges, integrating frame-by-frame so motion stays continuous through
-     * canvas resizes and live config changes.
+     * Move the image along its 45-degree path, folding the traveled distance
+     * exactly into the reflected path. Any frame gap — a world hop, a client
+     * freeze, a laptop resume — resumes the image where it would be had it
+     * kept flying the whole time, bounces included.
      */
     private void advancePosition(int travelWidth, int travelHeight)
     {
         long now = System.nanoTime();
-        double raw = lastFrameNanos == 0 ? 0 : (now - lastFrameNanos) / 1e9;
-        double dt = raw > STALL_SECONDS ? 0 : Math.min(raw, MAX_FRAME_SECONDS);
+        double dt = lastFrameNanos == 0 ? 0 : (now - lastFrameNanos) / 1e9;
         lastFrameNanos = now;
 
         travelWidth = Math.max(0, travelWidth);
@@ -172,50 +167,63 @@ public class DvdBounceOverlay extends Overlay
         }
 
         double step = config.speed() * dt;
-        x += directionX * step;
-        y += directionY * step;
 
-        boolean bouncedX = false;
-        boolean bouncedY = false;
-        if (x <= 0)
-        {
-            x = 0;
-            directionX = 1;
-            bouncedX = true;
-        }
-        else if (x >= travelWidth)
-        {
-            x = travelWidth;
-            directionX = -1;
-            bouncedX = true;
-        }
-        if (y <= 0)
-        {
-            y = 0;
-            directionY = 1;
-            bouncedY = true;
-        }
-        else if (y >= travelHeight)
-        {
-            y = travelHeight;
-            directionY = -1;
-            bouncedY = true;
-        }
+        double[] state = {x, directionX};
+        int bouncesX = fold(state, travelWidth, step);
+        x = state[0];
+        directionX = state[1];
 
-        // A canvas resize can pin the image against an edge for several frames;
-        // only count a bounce when the image actually had room to travel.
-        if (bouncedX && travelWidth > 0)
-        {
-            bounceCount++;
-        }
-        if (bouncedY && travelHeight > 0)
-        {
-            bounceCount++;
-        }
-        if (bouncedX && bouncedY && travelWidth > 0 && travelHeight > 0)
+        state[0] = y;
+        state[1] = directionY;
+        int bouncesY = fold(state, travelHeight, step);
+        y = state[0];
+        directionY = state[1];
+
+        bounceCount += bouncesX + bouncesY;
+
+        if (bouncesX > 0 && bouncesY > 0 && dt <= NORMAL_FRAME_SECONDS)
         {
             cornerFlashStartMs = System.currentTimeMillis();
         }
+    }
+
+    /**
+     * Advance one axis by {@code step} along its edge-reflected path.
+     * {@code state} holds {position, direction} and is updated in place;
+     * returns how many edge bounces the step crossed. The reflected path is a
+     * triangle wave with period {@code 2 * travel}, so any distance folds in
+     * exactly regardless of how many reflections it spans.
+     */
+    private static int fold(double[] state, double travel, double step)
+    {
+        if (travel <= 0)
+        {
+            // No room to travel (image as large as the canvas, or a resize
+            // squeeze): pin to the edge without counting bounces.
+            state[0] = 0;
+            return 0;
+        }
+
+        double pos = Math.max(0, Math.min(state[0], travel));
+        // Phase runs monotonically along the unfolded path: 0..travel is the
+        // outbound leg, travel..2*travel the return leg.
+        double phase = state[1] >= 0 ? pos : 2 * travel - pos;
+        double advanced = phase + step;
+        int bounces = (int) Math.min(Integer.MAX_VALUE,
+            Math.floor(advanced / travel) - Math.floor(phase / travel));
+
+        double m = advanced % (2 * travel);
+        if (m <= travel)
+        {
+            state[0] = m;
+            state[1] = 1;
+        }
+        else
+        {
+            state[0] = 2 * travel - m;
+            state[1] = -1;
+        }
+        return Math.max(0, bounces);
     }
 
     /**
