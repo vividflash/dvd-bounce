@@ -1,7 +1,7 @@
 # DVD Bounce
 
-A picture bounces around your client like the DVD screensaver. Will it hit
-the corner?
+A picture bounces around your client like the DVD screensaver. Will hit the
+corner.
 
 ## Features
 
