@@ -28,8 +28,8 @@ edges. Will it ever hit the corner?
 | Corner-hit flash | off | |
 
 Animated GIFs play, looping continuously. To keep memory bounded, frames are
-downscaled to at most 512 px on their longest side and very long animations
-are truncated (at most 150 frames / 64 MB decoded).
+downscaled to at most 512 px on their longest side and long animations are
+truncated to the first 20 frames.
 
 ## Photosensitivity warning
 
