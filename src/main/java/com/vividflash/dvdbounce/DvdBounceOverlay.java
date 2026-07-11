@@ -29,6 +29,8 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
+import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
@@ -48,12 +50,17 @@ public class DvdBounceOverlay extends Overlay
     private static final long CORNER_FLASH_DURATION_MS = 400L;
 
     /**
-     * Frame-time clamp so the image doesn't teleport after a long stall
-     * (client freeze, world hop, laptop resume). Generous enough that motion
-     * stays real-time while the client throttles its frame rate when the
-     * window is unfocused or covered.
+     * Frame-time clamp so motion stays smooth while the client throttles its
+     * frame rate when the window is unfocused or covered.
      */
     private static final double MAX_FRAME_SECONDS = 0.25;
+
+    /**
+     * Frame gaps longer than this are a stall (world hop, client freeze,
+     * laptop resume): motion pauses for that gap instead of lurching ahead
+     * while the client catches up.
+     */
+    private static final double STALL_SECONDS = 0.5;
 
     private final Client client;
     private final DvdBouncePlugin plugin;
@@ -69,8 +76,12 @@ public class DvdBounceOverlay extends Overlay
     private int bounceCount;
     private long cornerFlashStartMs;
 
-    private BufferedImage tintedImage;
-    private BufferedImage tintedSource;
+    /**
+     * Tinted copies of the source frames for the current bounce count, so an
+     * animated source is hue-rotated once per frame per bounce instead of on
+     * every frame swap.
+     */
+    private final Map<BufferedImage, BufferedImage> tintedFrames = new HashMap<>();
     private int tintedBounceCount = -1;
 
     @Inject
@@ -139,8 +150,8 @@ public class DvdBounceOverlay extends Overlay
     private void advancePosition(int travelWidth, int travelHeight)
     {
         long now = System.nanoTime();
-        double dt = lastFrameNanos == 0 ? 0
-            : Math.min((now - lastFrameNanos) / 1e9, MAX_FRAME_SECONDS);
+        double raw = lastFrameNanos == 0 ? 0 : (now - lastFrameNanos) / 1e9;
+        double dt = raw > STALL_SECONDS ? 0 : Math.min(raw, MAX_FRAME_SECONDS);
         lastFrameNanos = now;
 
         travelWidth = Math.max(0, travelWidth);
@@ -201,22 +212,20 @@ public class DvdBounceOverlay extends Overlay
     }
 
     /**
-     * The source frame with the current bounce count's hue rotation applied,
-     * recomputed only when a bounce happens or the frame changes (animated
-     * sources swap frames as they play).
+     * The source frame with the current bounce count's hue rotation applied.
+     * Cached per frame until the next bounce changes the hue; the size guard
+     * sheds stale entries when the user switches to a different source image.
      */
     private BufferedImage tintedFor(BufferedImage source)
     {
-        if (tintedImage != null && tintedSource == source && tintedBounceCount == bounceCount)
+        if (tintedBounceCount != bounceCount || tintedFrames.size() > 32)
         {
-            return tintedImage;
+            tintedFrames.clear();
+            tintedBounceCount = bounceCount;
         }
 
         float hueShift = (bounceCount * HUE_STEP) % 1f;
-        tintedImage = hueRotate(source, hueShift);
-        tintedSource = source;
-        tintedBounceCount = bounceCount;
-        return tintedImage;
+        return tintedFrames.computeIfAbsent(source, f -> hueRotate(f, hueShift));
     }
 
     private static BufferedImage hueRotate(BufferedImage source, float hueShift)
