@@ -87,6 +87,7 @@ public class DvdBouncePlugin extends Plugin
             log.warn("Could not create plugin folder {}", PLUGIN_DIR);
         }
         bundledPlaceholder = loadBundledImage("placeholder.png");
+        overlay.resetState();
         overlayManager.add(overlay);
     }
 

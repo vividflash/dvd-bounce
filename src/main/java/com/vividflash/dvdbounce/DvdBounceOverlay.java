@@ -163,6 +163,20 @@ public class DvdBounceOverlay extends Overlay
     }
 
     /**
+     * Reset transient run state when the plugin starts. The overlay is a
+     * singleton, so a pause captured before the plugin was toggled off
+     * (mid-hop) would otherwise leak into the next start and freeze the logo
+     * until another hop completes; the stale frame timer would fold the
+     * whole downtime into one jump.
+     */
+    void resetState()
+    {
+        paused = false;
+        resumeAtMs = Long.MAX_VALUE;
+        lastFrameNanos = 0;
+    }
+
+    /**
      * Freeze the logo where it is. Repeated calls (hop -> login states) keep
      * it paused; the pending resume, if any, is cancelled.
      */
