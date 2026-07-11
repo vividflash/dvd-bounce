@@ -11,8 +11,6 @@ corner.
   A colourful gradient square is bundled as the default.
 - **Colour shift** — the image's colours rotate a step on every bounce, just
   like the DVD logo changing colour.
-- **Corner-hit flash** — optional celebratory white flash when the image lands
-  exactly in a corner (off by default, see warning below).
 - **Size and speed sliders** — from a subtle 24 px drifter to a 512 px
   screen-filler.
 
@@ -24,16 +22,10 @@ corner.
 | Image size (px) | 112 | Width; height follows the image's aspect ratio. |
 | Speed (px/s) | 208 | |
 | Colour shift on bounce | on | |
-| Corner-hit flash | off | |
 
 Animated GIFs play, looping continuously. To keep memory bounded, frames are
 downscaled to at most 512 px on their longest side and long animations are
 truncated to the first 10 frames.
-
-## Photosensitivity warning
-
-The optional **corner-hit flash** briefly flashes the whole client white. It is
-off by default; leave it off if you are sensitive to sudden flashes.
 
 ## License
 

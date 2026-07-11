@@ -47,15 +47,6 @@ public class DvdBounceOverlay extends Overlay
      */
     private static final float HUE_STEP = 47f / 360f;
 
-    private static final long CORNER_FLASH_DURATION_MS = 400L;
-
-    /**
-     * Frames at most this long are ordinary rendering; only they can signal a
-     * corner hit. Across longer gaps (world hop, client freeze) the position
-     * still advances exactly, but per-axis bounces happened at different
-     * moments, so "both axes bounced" no longer means a corner was struck.
-     */
-    private static final double NORMAL_FRAME_SECONDS = 0.25;
 
     private final Client client;
     private final DvdBouncePlugin plugin;
@@ -69,7 +60,6 @@ public class DvdBounceOverlay extends Overlay
     private boolean positionInitialized;
 
     private int bounceCount;
-    private long cornerFlashStartMs;
 
     /**
      * How long after a world hop completes before motion resumes, giving the
@@ -169,8 +159,6 @@ public class DvdBounceOverlay extends Overlay
         BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
         graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y), null);
 
-        renderCornerFlash(graphics, canvasWidth, canvasHeight);
-
         return new Dimension(canvasWidth, canvasHeight);
     }
 
@@ -236,11 +224,6 @@ public class DvdBounceOverlay extends Overlay
         directionY = state[1];
 
         bounceCount += bouncesX + bouncesY;
-
-        if (bouncesX > 0 && bouncesY > 0 && dt <= NORMAL_FRAME_SECONDS)
-        {
-            cornerFlashStartMs = System.currentTimeMillis();
-        }
     }
 
     /**
@@ -351,22 +334,4 @@ public class DvdBounceOverlay extends Overlay
         return out;
     }
 
-    private void renderCornerFlash(Graphics2D graphics, int canvasWidth, int canvasHeight)
-    {
-        if (!config.cornerFlash() || cornerFlashStartMs == 0)
-        {
-            return;
-        }
-
-        long elapsed = System.currentTimeMillis() - cornerFlashStartMs;
-        if (elapsed >= CORNER_FLASH_DURATION_MS)
-        {
-            cornerFlashStartMs = 0;
-            return;
-        }
-
-        float alpha = 1f - (float) elapsed / CORNER_FLASH_DURATION_MS;
-        graphics.setColor(new Color(1f, 1f, 1f, alpha));
-        graphics.fillRect(0, 0, canvasWidth, canvasHeight);
-    }
 }

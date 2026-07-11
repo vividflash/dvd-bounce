@@ -77,15 +77,4 @@ public interface DvdBounceConfig extends Config
     {
         return true;
     }
-
-    @ConfigItem(
-        keyName = "cornerFlash",
-        name = "Corner-hit flash",
-        description = "Briefly flash the screen white when the image lands exactly in a corner (photosensitivity warning: this is a sudden full-screen flash)",
-        position = 4
-    )
-    default boolean cornerFlash()
-    {
-        return false;
-    }
 }
