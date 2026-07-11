@@ -29,7 +29,7 @@ edges. Will it ever hit the corner?
 
 Animated GIFs play, looping continuously. To keep memory bounded, frames are
 downscaled to at most 512 px on their longest side and long animations are
-truncated to the first 20 frames.
+truncated to the first 10 frames.
 
 ## Photosensitivity warning
 
