@@ -77,9 +77,18 @@ public class DvdBounceOverlay extends Overlay
     private long cornerFlashStartMs;
 
     /**
-     * Tinted copies of the source frames for the current bounce count, so an
-     * animated source is hue-rotated once per frame per bounce instead of on
-     * every frame swap.
+     * Source frames pre-scaled to the current draw size, so each animation
+     * frame is resized once instead of bilinearly rescaled on every render.
+     */
+    private final Map<BufferedImage, BufferedImage> scaledFrames = new HashMap<>();
+    private AnimatedImage scaledSource;
+    private int scaledWidth;
+    private int scaledHeight;
+
+    /**
+     * Tinted copies of the draw-size frames for the current bounce count, so
+     * an animated source is hue-rotated once per frame per bounce instead of
+     * on every frame swap — and only over draw-size pixels.
      */
     private final Map<BufferedImage, BufferedImage> tintedFrames = new HashMap<>();
     private int tintedBounceCount = -1;
@@ -131,11 +140,9 @@ public class DvdBounceOverlay extends Overlay
         // Animated sources loop on the wall clock; static ones always return
         // their single frame.
         BufferedImage frame = source.frameAt(System.currentTimeMillis());
-        BufferedImage image = config.colourShift() ? tintedFor(frame) : frame;
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y),
-            drawWidth, drawHeight, null);
+        BufferedImage scaled = scaledFor(source, frame, drawWidth, drawHeight);
+        BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
+        graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y), null);
 
         renderCornerFlash(graphics, canvasWidth, canvasHeight);
 
@@ -212,9 +219,42 @@ public class DvdBounceOverlay extends Overlay
     }
 
     /**
-     * The source frame with the current bounce count's hue rotation applied.
-     * Cached per frame until the next bounce changes the hue; the size guard
-     * sheds stale entries when the user switches to a different source image.
+     * The given frame pre-scaled to the current draw size, computed once per
+     * frame and cached until the source image or draw size changes. The tint
+     * cache is keyed by these scaled frames, so it resets alongside.
+     */
+    private BufferedImage scaledFor(AnimatedImage source, BufferedImage frame, int width, int height)
+    {
+        if (scaledSource != source || scaledWidth != width || scaledHeight != height
+            || scaledFrames.size() > 32)
+        {
+            scaledFrames.clear();
+            tintedFrames.clear();
+            scaledSource = source;
+            scaledWidth = width;
+            scaledHeight = height;
+        }
+
+        return scaledFrames.computeIfAbsent(frame, f ->
+        {
+            if (f.getWidth() == width && f.getHeight() == height)
+            {
+                return f;
+            }
+            BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = scaled.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(f, 0, 0, width, height, null);
+            g.dispose();
+            return scaled;
+        });
+    }
+
+    /**
+     * The draw-size frame with the current bounce count's hue rotation
+     * applied. Cached per frame until the next bounce changes the hue; the
+     * size guard sheds stale entries when the source frames change.
      */
     private BufferedImage tintedFor(BufferedImage source)
     {
