@@ -1,8 +1,7 @@
 # DVD Bounce
 
-A picture bounces around your RuneLite client like the classic DVD-player
-screensaver, drifting across the screen at 45 degrees and ricocheting off the
-edges. Will it ever hit the corner?
+A picture bounces around your client like the DVD screensaver. Will it hit
+the corner?
 
 ## Features
 
