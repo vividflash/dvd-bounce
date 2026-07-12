@@ -171,7 +171,7 @@ public class DvdBounceOverlay extends Overlay
         BufferedImage scaled = scaledFor(source, frame, drawWidth, drawHeight);
         BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
 
-        if (subPixel)
+        if (useSubPixel())
         {
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                 RenderingHints.VALUE_INTERPOLATION_BILINEAR);
@@ -199,6 +199,23 @@ public class DvdBounceOverlay extends Overlay
         lastFrameNanos = 0;
         avgFrameSeconds = 0;
         subPixel = false;
+    }
+
+    /**
+     * The draw mode for this frame: the FPS mode config forces crisp or
+     * smooth outright; Adaptive follows the measured frame rate.
+     */
+    private boolean useSubPixel()
+    {
+        switch (config.fpsMode())
+        {
+            case CRISP:
+                return false;
+            case SMOOTH:
+                return true;
+            default:
+                return subPixel;
+        }
     }
 
     /**

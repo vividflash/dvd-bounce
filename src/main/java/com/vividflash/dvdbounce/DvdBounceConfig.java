@@ -67,6 +67,17 @@ public interface DvdBounceConfig extends Config
     }
 
     @ConfigItem(
+        keyName = "fpsMode",
+        name = "FPS mode",
+        description = "Adaptive picks automatically from the measured frame rate. Crisp snaps to whole pixels (sharpest, ideal at 60 fps). Smooth draws at sub-pixel positions (judder-free on unlocked/high fps, slightly softer edges).",
+        position = 4
+    )
+    default FpsMode fpsMode()
+    {
+        return FpsMode.ADAPTIVE;
+    }
+
+    @ConfigItem(
         keyName = "colourShift",
         name = "Colour shift on bounce",
         description = "Rotate the image's colours a step every time it bounces off an edge, like the DVD logo",
