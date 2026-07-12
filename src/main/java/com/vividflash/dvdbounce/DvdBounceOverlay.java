@@ -28,6 +28,7 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
@@ -60,6 +61,18 @@ public class DvdBounceOverlay extends Overlay
     private boolean positionInitialized;
 
     private int bounceCount;
+
+    /**
+     * Smoothed frame interval (EMA), used to pick the draw mode. At the
+     * standard ~60 fps the speed presets advance in whole pixels, so crisp
+     * integer positions are ideal. On higher frame rates (GPU/117HD unlocked
+     * fps, custom targets like 72) frames no longer align with pixel steps,
+     * so the image is drawn at sub-pixel positions with bilinear filtering
+     * instead. Measuring the real frame time covers every fps source without
+     * reading other plugins' config; hysteresis stops the mode flapping.
+     */
+    private double avgFrameSeconds;
+    private boolean subPixel;
 
     /**
      * How long after a world hop completes before motion resumes, giving the
@@ -157,7 +170,17 @@ public class DvdBounceOverlay extends Overlay
         BufferedImage frame = source.frameAt(paused ? pausedClockMs : nowMs);
         BufferedImage scaled = scaledFor(source, frame, drawWidth, drawHeight);
         BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
-        graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y), null);
+
+        if (subPixel)
+        {
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            graphics.drawImage(image, AffineTransform.getTranslateInstance(x, y), null);
+        }
+        else
+        {
+            graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y), null);
+        }
 
         return new Dimension(canvasWidth, canvasHeight);
     }
@@ -174,6 +197,26 @@ public class DvdBounceOverlay extends Overlay
         paused = false;
         resumeAtMs = Long.MAX_VALUE;
         lastFrameNanos = 0;
+        avgFrameSeconds = 0;
+        subPixel = false;
+    }
+
+    /**
+     * Track the smoothed frame rate and flip between crisp integer rendering
+     * (~60 fps and below) and sub-pixel rendering (above), with hysteresis.
+     */
+    private void updateDrawMode(double dt)
+    {
+        if (dt <= 0 || dt > 0.25)
+        {
+            return;
+        }
+        avgFrameSeconds = avgFrameSeconds == 0 ? dt : avgFrameSeconds * 0.95 + dt * 0.05;
+        double fps = 1.0 / avgFrameSeconds;
+        if (subPixel ? fps < 63 : fps > 68)
+        {
+            subPixel = fps > 68;
+        }
     }
 
     /**
@@ -223,6 +266,8 @@ public class DvdBounceOverlay extends Overlay
             y = travelHeight * 0.73;
             positionInitialized = true;
         }
+
+        updateDrawMode(dt);
 
         double step = config.bounceSpeed().getPixelsPerSecond() * dt;
 
