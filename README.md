@@ -11,8 +11,9 @@ corner.
   A colourful gradient square is bundled as the default.
 - **Colour shift** — the image's colours rotate a step on every bounce, just
   like the DVD logo changing colour.
-- **Size and speed sliders** — from a subtle 24 px drifter to a 512 px
-  screen-filler.
+- **Size slider and speed presets** — from a subtle 24 px drifter to a 512 px
+  screen-filler; speed steps from Slow to Turbo, tuned to stay judder-free at
+  60 fps.
 
 ## Configuration
 
@@ -20,7 +21,7 @@ corner.
 |---|---|---|
 | Custom image file | *(blank)* | File name inside your `.runelite/dvd-bounce` folder (created when the plugin starts), e.g. `logo.png`. Blank = bundled placeholder. Falls back to the placeholder if the file can't be read. |
 | Image size (px) | 112 | Width; height follows the image's aspect ratio. |
-| Speed (px/s) | 208 | |
+| Speed | Classic | Ultra slow to Ultra fast (15-600 px/s). Fixed presets that keep pixel steps evenly paced at 60 fps, so slow speeds don't judder. |
 | Colour shift on bounce | on | |
 
 Animated GIFs play, looping continuously. To keep memory bounded, frames are

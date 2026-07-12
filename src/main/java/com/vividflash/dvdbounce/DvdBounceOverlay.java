@@ -224,7 +224,7 @@ public class DvdBounceOverlay extends Overlay
             positionInitialized = true;
         }
 
-        double step = config.speed() * dt;
+        double step = config.bounceSpeed().getPixelsPerSecond() * dt;
 
         double[] state = {x, directionX};
         int bouncesX = fold(state, travelWidth, step);

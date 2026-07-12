@@ -56,15 +56,14 @@ public interface DvdBounceConfig extends Config
     }
 
     @ConfigItem(
-        keyName = "speed",
-        name = "Speed (px/s)",
-        description = "How fast the image travels, in pixels per second",
+        keyName = "bounceSpeed",
+        name = "Speed",
+        description = "How fast the image travels, from Ultra slow (15 px/s) to Ultra fast (600 px/s). Fixed steps chosen to stay judder-free at 60 fps; higher or uncapped frame rates are smooth with any of them.",
         position = 2
     )
-    @Range(min = 50, max = 1000)
-    default int speed()
+    default BounceSpeed bounceSpeed()
     {
-        return 208;
+        return BounceSpeed.CLASSIC;
     }
 
     @ConfigItem(
