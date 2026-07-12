@@ -12,8 +12,8 @@ corner.
 - **Colour shift** — the image's colours rotate a step on every bounce, just
   like the DVD logo changing colour.
 - **Size slider and speed presets** — from a subtle 24 px drifter to a 512 px
-  screen-filler; speed steps from Slow to Turbo, tuned to stay judder-free at
-  60 fps.
+  screen-filler; speeds from Ultra slow to Ultra fast, tuned to stay
+  judder-free at 60 fps.
 
 ## Configuration
 
