@@ -39,8 +39,8 @@ import lombok.RequiredArgsConstructor;
 public enum FpsMode
 {
     ADAPTIVE("Adaptive"),
-    CRISP("Crisp (60 fps)"),
-    SMOOTH("Smooth (high fps)");
+    CRISP("Crisp (60fps)"),
+    SMOOTH("Smooth (Unlocked)");
 
     private final String label;
 

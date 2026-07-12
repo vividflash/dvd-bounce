@@ -22,7 +22,7 @@ corner.
 | Custom image file | *(blank)* | File name inside your `.runelite/dvd-bounce` folder (created when the plugin starts), e.g. `logo.png`. Blank = bundled placeholder. Falls back to the placeholder if the file can't be read. |
 | Image size (px) | 112 | Width; height follows the image's aspect ratio. |
 | Speed | Classic | Ultra slow to Ultra fast (15-600 px/s). Fixed presets that keep pixel steps evenly paced at 60 fps, so slow speeds don't judder. |
-| FPS mode | Adaptive | Adaptive follows the measured frame rate; Crisp forces whole-pixel rendering (sharpest, for 60 fps); Smooth forces sub-pixel rendering (for unlocked/high fps). |
+| FPS mode | Adaptive | Adaptive follows the measured frame rate; Crisp (60fps) forces whole-pixel rendering (sharpest); Smooth (Unlocked) forces sub-pixel rendering for unlocked/high fps. |
 | Colour shift on bounce | on | |
 
 Animated GIFs play, looping continuously. To keep memory bounded, frames are
