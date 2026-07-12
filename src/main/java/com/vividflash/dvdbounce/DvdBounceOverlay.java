@@ -28,7 +28,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
@@ -158,13 +157,7 @@ public class DvdBounceOverlay extends Overlay
         BufferedImage frame = source.frameAt(paused ? pausedClockMs : nowMs);
         BufferedImage scaled = scaledFor(source, frame, drawWidth, drawHeight);
         BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
-
-        // Draw at the fractional position with bilinear filtering: snapping
-        // to whole pixels makes slow movement judder, since sub-pixel speeds
-        // only advance the image on irregular frames.
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-            RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        graphics.drawImage(image, AffineTransform.getTranslateInstance(x, y), null);
+        graphics.drawImage(image, (int) Math.round(x), (int) Math.round(y), null);
 
         return new Dimension(canvasWidth, canvasHeight);
     }
