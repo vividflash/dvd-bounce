@@ -6,8 +6,8 @@ corner.
 ## Features
 
 - **Bring your own image** — drop a PNG, JPG, GIF or BMP into your
-  `.runelite/dvd-bounce` folder (your clan logo, your cat, anything) and put
-  its file name in *Custom image file*. Animated GIFs play while they bounce.
+  `.runelite/dvd-bounce` folder and put its file name in *Custom image file*.
+  Animated GIFs play while they bounce.
   A colourful gradient square is bundled as the default.
 - **Colour shift** — the image's colours rotate a step on every bounce, just
   like the DVD logo changing colour.
@@ -29,8 +29,8 @@ Animated GIFs play, looping continuously. To keep memory bounded, frames are
 downscaled to at most 512 px on their longest side and long animations are
 truncated to the first 10 frames.
 
-Replaced the file with a new one under the same name? Toggle the plugin off
-and on to reload it.
+After replacing a file under the same name, toggle the plugin off and on to
+reload it.
 
 ## License
 
