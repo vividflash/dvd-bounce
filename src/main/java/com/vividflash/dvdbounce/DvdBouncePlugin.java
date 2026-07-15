@@ -33,8 +33,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.RuneLite;
+import net.runelite.client.chat.ChatMessageBuilder;
+import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -66,6 +70,17 @@ public class DvdBouncePlugin extends Plugin
 
     private static final String CONFIG_GROUP = "dvdbounce";
     private static final String CUSTOM_IMAGE_KEY = "customImagePath";
+    private static final String LAST_SEEN_VERSION_KEY = "lastSeenVersion";
+
+    /**
+     * Release discipline: bump VERSION and UPDATE_MESSAGE together on every
+     * release (alongside build.gradle and runelite-plugin.properties). Minor
+     * releases describe that release; a major x.0 release summarises the
+     * important changes since the previous major.
+     */
+    private static final String VERSION = "1.3";
+    private static final String UPDATE_MESSAGE =
+        "DVD Bounce v1.3: image changes no longer stutter, lower memory use while disabled.";
 
     @Inject
     private DvdBounceConfig config;
@@ -78,6 +93,15 @@ public class DvdBouncePlugin extends Plugin
 
     @Inject
     private ScheduledExecutorService executor;
+
+    @Inject
+    private ConfigManager configManager;
+
+    @Inject
+    private ChatMessageManager chatMessageManager;
+
+    /** One update check per session; reset on startUp. */
+    private boolean updateChecked;
 
     private AnimatedImage bundledPlaceholder;
 
@@ -99,6 +123,7 @@ public class DvdBouncePlugin extends Plugin
     @Override
     protected void startUp()
     {
+        updateChecked = false;
         if (!PLUGIN_DIR.exists() && !PLUGIN_DIR.mkdirs())
         {
             log.warn("Could not create plugin folder {}", PLUGIN_DIR);
@@ -146,6 +171,7 @@ public class DvdBouncePlugin extends Plugin
                 break;
             case LOGGED_IN:
                 overlay.scheduleResume();
+                maybeAnnounceUpdate();
                 break;
             default:
                 break;
@@ -159,6 +185,39 @@ public class DvdBouncePlugin extends Plugin
         {
             reloadCustomImage();
         }
+    }
+
+    /**
+     * One-time post-update notice: on the first login after the plugin
+     * version changes, drop a single line in chat summarising the update.
+     * Fresh installs (and updates from versions predating this notice)
+     * record the version silently.
+     */
+    private void maybeAnnounceUpdate()
+    {
+        if (updateChecked)
+        {
+            return;
+        }
+        updateChecked = true;
+
+        String lastSeen = configManager.getConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY);
+        if (VERSION.equals(lastSeen))
+        {
+            return;
+        }
+        configManager.setConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY, VERSION);
+        if (lastSeen == null || lastSeen.isEmpty())
+        {
+            return;
+        }
+
+        chatMessageManager.queue(QueuedMessage.builder()
+            .type(ChatMessageType.CONSOLE)
+            .runeLiteFormattedMessage(new ChatMessageBuilder()
+                .append(UPDATE_MESSAGE)
+                .build())
+            .build());
     }
 
     /**
