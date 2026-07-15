@@ -29,6 +29,9 @@ Animated GIFs play, looping continuously. To keep memory bounded, frames are
 downscaled to at most 512 px on their longest side and long animations are
 truncated to the first 10 frames.
 
+Replaced the file with a new one under the same name? Toggle the plugin off
+and on to reload it.
+
 ## License
 
 BSD 2-Clause. All code and the bundled placeholder image are original to this
