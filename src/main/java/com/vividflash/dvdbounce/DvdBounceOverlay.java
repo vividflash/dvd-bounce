@@ -147,7 +147,7 @@ public class DvdBounceOverlay extends Overlay
             (int) Math.round((double) drawWidth * source.getHeight() / source.getWidth()));
         drawHeight = Math.min(drawHeight, canvasHeight);
 
-        long nowMs = System.currentTimeMillis();
+        long nowMs = monotonicMs();
         if (paused && nowMs >= resumeAtMs)
         {
             paused = false;
@@ -165,8 +165,8 @@ public class DvdBounceOverlay extends Overlay
             advancePosition(canvasWidth - drawWidth, canvasHeight - drawHeight);
         }
 
-        // Animated sources loop on the wall clock; static ones always return
-        // their single frame. While paused the clock freezes too.
+        // Animated sources loop on the monotonic clock; static ones always
+        // return their single frame. While paused the clock freezes too.
         BufferedImage frame = source.frameAt(paused ? pausedClockMs : nowMs);
         BufferedImage scaled = scaledFor(source, frame, drawWidth, drawHeight);
         BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
@@ -199,6 +199,28 @@ public class DvdBounceOverlay extends Overlay
         lastFrameNanos = 0;
         avgFrameSeconds = 0;
         subPixel = false;
+    }
+
+    /**
+     * Drop the pre-scaled and tinted frame caches so a disabled plugin pins
+     * no image memory. Called from the plugin's shutDown.
+     */
+    void clearImageCaches()
+    {
+        scaledFrames.clear();
+        tintedFrames.clear();
+        scaledSource = null;
+    }
+
+    /**
+     * Milliseconds from the monotonic clock. Used for the animation clock and
+     * pause/resume timers instead of the wall clock, which can jump around
+     * NTP corrections; the epoch is arbitrary but all users only ever compare
+     * differences.
+     */
+    private static long monotonicMs()
+    {
+        return System.nanoTime() / 1_000_000L;
     }
 
     /**
@@ -245,7 +267,7 @@ public class DvdBounceOverlay extends Overlay
         if (!paused)
         {
             paused = true;
-            pausedClockMs = System.currentTimeMillis();
+            pausedClockMs = monotonicMs();
         }
         resumeAtMs = Long.MAX_VALUE;
     }
@@ -258,7 +280,7 @@ public class DvdBounceOverlay extends Overlay
     {
         if (paused && resumeAtMs == Long.MAX_VALUE)
         {
-            resumeAtMs = System.currentTimeMillis() + RESUME_GRACE_MS;
+            resumeAtMs = monotonicMs() + RESUME_GRACE_MS;
         }
     }
 

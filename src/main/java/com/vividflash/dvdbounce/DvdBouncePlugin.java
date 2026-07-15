@@ -28,6 +28,8 @@ import com.google.inject.Provides;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.client.RuneLite;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -61,6 +64,9 @@ public class DvdBouncePlugin extends Plugin
      */
     private static final File PLUGIN_DIR = new File(RuneLite.RUNELITE_DIR, "dvd-bounce");
 
+    private static final String CONFIG_GROUP = "dvdbounce";
+    private static final String CUSTOM_IMAGE_KEY = "customImagePath";
+
     @Inject
     private DvdBounceConfig config;
 
@@ -70,14 +76,25 @@ public class DvdBouncePlugin extends Plugin
     @Inject
     private OverlayManager overlayManager;
 
+    @Inject
+    private ScheduledExecutorService executor;
+
     private AnimatedImage bundledPlaceholder;
 
     /**
-     * Cache of the last custom image loaded, keyed by its path, so the file is
-     * read from disk only when the configured path changes.
+     * The configured custom image, preloaded on the executor at startup and
+     * whenever its config key changes, so the overlay's render loop never
+     * touches the disk. Null when unset or unloadable — the overlay falls
+     * back to the bundled placeholder.
      */
-    private String cachedCustomPath;
-    private AnimatedImage cachedCustomImage;
+    private volatile AnimatedImage customImage;
+
+    /**
+     * Load generation: each (re)load bumps the counter and only the newest
+     * load may publish its result, so a slow decode can't overwrite a newer
+     * config edit — and results arriving after shutDown are dropped.
+     */
+    private final AtomicInteger imageLoadGen = new AtomicInteger();
 
     @Override
     protected void startUp()
@@ -87,6 +104,7 @@ public class DvdBouncePlugin extends Plugin
             log.warn("Could not create plugin folder {}", PLUGIN_DIR);
         }
         bundledPlaceholder = loadBundledImage("placeholder.png");
+        reloadCustomImage();
         overlay.resetState();
         overlayManager.add(overlay);
     }
@@ -95,8 +113,12 @@ public class DvdBouncePlugin extends Plugin
     protected void shutDown()
     {
         overlayManager.remove(overlay);
-        cachedCustomPath = null;
-        cachedCustomImage = null;
+        // Release all decoded frames so a disabled plugin pins no heap; the
+        // generation bump also invalidates any load still in flight.
+        imageLoadGen.incrementAndGet();
+        customImage = null;
+        bundledPlaceholder = null;
+        overlay.clearImageCaches();
     }
 
     @Provides
@@ -130,49 +152,65 @@ public class DvdBouncePlugin extends Plugin
         }
     }
 
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event)
+    {
+        if (CONFIG_GROUP.equals(event.getGroup()) && CUSTOM_IMAGE_KEY.equals(event.getKey()))
+        {
+            reloadCustomImage();
+        }
+    }
+
     /**
-     * Resolve the image to bounce: the custom image if configured and loadable,
-     * otherwise the bundled placeholder. Called from the overlay every frame;
-     * disk I/O only happens when the configured file name changes.
+     * Resolve the image to bounce: the preloaded custom image if configured
+     * and loadable, otherwise the bundled placeholder. Called from the
+     * overlay every frame; never does any I/O — loading happens on the
+     * executor via {@link #reloadCustomImage()}.
      */
     AnimatedImage resolveSourceImage()
     {
-        String customName = config.customImageFile();
-        if (customName == null || customName.trim().isEmpty())
-        {
-            return bundledPlaceholder;
-        }
+        AnimatedImage custom = customImage;
+        return custom != null ? custom : bundledPlaceholder;
+    }
 
-        String name = customName.trim();
-        if (name.equals(cachedCustomPath))
+    /**
+     * (Re)load the configured custom image on the executor, publishing into
+     * {@link #customImage}. Runs off the client thread so neither rendering
+     * nor config edits ever wait on disk or GIF decoding.
+     */
+    private void reloadCustomImage()
+    {
+        int gen = imageLoadGen.incrementAndGet();
+        String configured = config.customImageFile();
+        String name = configured == null ? "" : configured.trim();
+        executor.execute(() ->
         {
-            return cachedCustomImage != null ? cachedCustomImage : bundledPlaceholder;
-        }
-
-        // Remember the attempted name even on failure so a broken file is not
-        // re-read from disk every frame.
-        cachedCustomPath = name;
-        cachedCustomImage = null;
-        try
-        {
-            File imageFile = resolvePluginFile(name);
-            if (imageFile != null && imageFile.isFile())
+            AnimatedImage loaded = null;
+            if (!name.isEmpty())
             {
-                AnimatedImage loaded = AnimatedImage.load(imageFile,
-                    MAX_SOURCE_DIMENSION, MAX_SOURCE_DIMENSION);
-                if (loaded != null)
+                try
                 {
-                    cachedCustomImage = loaded;
-                    return cachedCustomImage;
+                    File imageFile = resolvePluginFile(name);
+                    if (imageFile != null && imageFile.isFile())
+                    {
+                        loaded = AnimatedImage.load(imageFile,
+                            MAX_SOURCE_DIMENSION, MAX_SOURCE_DIMENSION);
+                    }
+                    if (loaded == null)
+                    {
+                        log.warn("Could not load custom image from {}, falling back to placeholder: {}", PLUGIN_DIR, name);
+                    }
+                }
+                catch (IOException e)
+                {
+                    log.warn("Failed to read custom image, falling back to placeholder: {}", name, e);
                 }
             }
-            log.warn("Could not load custom image from {}, falling back to placeholder: {}", PLUGIN_DIR, name);
-        }
-        catch (IOException e)
-        {
-            log.warn("Failed to read custom image, falling back to placeholder: {}", name, e);
-        }
-        return bundledPlaceholder;
+            if (gen == imageLoadGen.get())
+            {
+                customImage = loaded;
+            }
+        });
     }
 
     /**
