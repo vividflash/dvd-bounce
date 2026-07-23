@@ -78,12 +78,7 @@ public class DvdBouncePlugin extends Plugin
     /** Config items removed by earlier versions; cleared from profiles once. */
     private static final String[] DEAD_KEYS = {"speed", "cornerFlash"};
 
-    /**
-     * Release discipline: bump VERSION and UPDATE_MESSAGE together on every
-     * release (alongside build.gradle and runelite-plugin.properties). Minor
-     * releases describe that release; a major x.0 release summarises the
-     * important changes since the previous major.
-     */
+    /** Keep in sync with build.gradle and runelite-plugin.properties on every release. */
     private static final String VERSION = "1.4";
     private static final String UPDATE_MESSAGE =
         "DVD Bounce v1.4: custom images can now be animated GIFs.";
@@ -198,11 +193,9 @@ public class DvdBouncePlugin extends Plugin
     }
 
     /**
-     * One-time post-update notice on the first login. The GIF announcement
-     * is shown once to every profile that has not seen it, so it reaches
-     * users updating from a version that shipped no notice mechanism at all
-     * (every release so far), for whom the version check would stay silent.
-     * Later releases fall through to the normal version comparison.
+     * One-time post-update notice on first login. Profiles that have never
+     * seen an update notice get it unconditionally once (covers installs
+     * predating this mechanism); afterward it's a normal version comparison.
      */
     private void maybeAnnounceUpdate()
     {
