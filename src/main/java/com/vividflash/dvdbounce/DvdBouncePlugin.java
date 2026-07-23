@@ -25,6 +25,7 @@
 package com.vividflash.dvdbounce;
 
 import com.google.inject.Provides;
+import java.awt.Color;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -71,6 +72,11 @@ public class DvdBouncePlugin extends Plugin
     private static final String CONFIG_GROUP = "dvdbounce";
     private static final String CUSTOM_IMAGE_KEY = "customImagePath";
     private static final String LAST_SEEN_VERSION_KEY = "lastSeenVersion";
+    private static final String GIF_NOTICE_KEY = "gifNoticeShown";
+    private static final String MIGRATION_KEY = "migratedV14";
+
+    /** Config items removed by earlier versions; cleared from profiles once. */
+    private static final String[] DEAD_KEYS = {"speed", "cornerFlash"};
 
     /**
      * Release discipline: bump VERSION and UPDATE_MESSAGE together on every
@@ -78,9 +84,12 @@ public class DvdBouncePlugin extends Plugin
      * releases describe that release; a major x.0 release summarises the
      * important changes since the previous major.
      */
-    private static final String VERSION = "1.3";
+    private static final String VERSION = "1.4";
     private static final String UPDATE_MESSAGE =
-        "DVD Bounce v1.3: image changes no longer stutter, lower memory use while disabled.";
+        "DVD Bounce v1.4: custom images can now be animated GIFs.";
+
+    /** Near-black dark red for the one-time update notice. */
+    private static final Color UPDATE_MESSAGE_COLOR = new Color(0x480000);
 
     @Inject
     private DvdBounceConfig config;
@@ -128,6 +137,7 @@ public class DvdBouncePlugin extends Plugin
         {
             log.warn("Could not create plugin folder {}", PLUGIN_DIR);
         }
+        migrateOnce();
         bundledPlaceholder = loadBundledImage("placeholder.png");
         reloadCustomImage();
         overlay.resetState();
@@ -188,10 +198,11 @@ public class DvdBouncePlugin extends Plugin
     }
 
     /**
-     * One-time post-update notice: on the first login after the plugin
-     * version changes, drop a single line in chat summarising the update.
-     * Fresh installs (and updates from versions predating this notice)
-     * record the version silently.
+     * One-time post-update notice on the first login. The GIF announcement
+     * is shown once to every profile that has not seen it, so it reaches
+     * users updating from a version that shipped no notice mechanism at all
+     * (every release so far), for whom the version check would stay silent.
+     * Later releases fall through to the normal version comparison.
      */
     private void maybeAnnounceUpdate()
     {
@@ -202,22 +213,44 @@ public class DvdBouncePlugin extends Plugin
         updateChecked = true;
 
         String lastSeen = configManager.getConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY);
-        if (VERSION.equals(lastSeen))
-        {
-            return;
-        }
         configManager.setConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY, VERSION);
-        if (lastSeen == null || lastSeen.isEmpty())
-        {
-            return;
-        }
 
+        if (!Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, GIF_NOTICE_KEY)))
+        {
+            configManager.setConfiguration(CONFIG_GROUP, GIF_NOTICE_KEY, true);
+            announce(UPDATE_MESSAGE);
+        }
+        else if (lastSeen != null && !lastSeen.isEmpty() && !VERSION.equals(lastSeen))
+        {
+            announce(UPDATE_MESSAGE);
+        }
+    }
+
+    private void announce(String message)
+    {
         chatMessageManager.queue(QueuedMessage.builder()
             .type(ChatMessageType.CONSOLE)
             .runeLiteFormattedMessage(new ChatMessageBuilder()
-                .append(UPDATE_MESSAGE)
+                .append(UPDATE_MESSAGE_COLOR, message)
                 .build())
             .build());
+    }
+
+    /**
+     * Clear config keys retired by earlier versions so they stop lingering
+     * in profiles. Runs once; the framework never re-creates a non-item key.
+     */
+    private void migrateOnce()
+    {
+        if (Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, MIGRATION_KEY)))
+        {
+            return;
+        }
+        configManager.setConfiguration(CONFIG_GROUP, MIGRATION_KEY, true);
+        for (String dead : DEAD_KEYS)
+        {
+            configManager.unsetConfiguration(CONFIG_GROUP, dead);
+        }
     }
 
     /**
