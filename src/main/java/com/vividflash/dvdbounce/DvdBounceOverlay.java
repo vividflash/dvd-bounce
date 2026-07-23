@@ -43,7 +43,7 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 public class DvdBounceOverlay extends Overlay
 {
     /**
-     * Hue step per bounce, as a fraction of a full turn (~47 degrees — close to
+     * Hue step per bounce, as a fraction of a full turn (47 degrees — close to
      * the colour change of the classic DVD screensaver).
      */
     private static final float HUE_STEP = 47f / 360f;
