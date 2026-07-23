@@ -36,3 +36,7 @@ reload it.
 
 BSD 2-Clause. All code and the bundled placeholder image are original to this
 plugin.
+
+## Credits
+
+Co-authored with Fable 5.
