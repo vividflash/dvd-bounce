@@ -43,11 +43,28 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 public class DvdBounceOverlay extends Overlay
 {
     /**
-     * Hue step per bounce, as a fraction of a full turn (47 degrees — close to
+     * Hue step per bounce, as a fraction of a full turn (47 degrees, close to
      * the colour change of the classic DVD screensaver).
      */
     private static final float HUE_STEP = 47f / 360f;
 
+    /**
+     * Steps after which the hue is back where it started. 47 and 360 share no
+     * factors, so the cycle is exactly 360 steps; wrapping the step counter
+     * there also keeps it clear of int overflow after a long frame gap.
+     */
+    private static final int HUE_CYCLE_STEPS = 360;
+
+    /**
+     * Shortest gap between two hue recomputes. A hue rotation walks every pixel
+     * of the draw-size image, so when the travel distance drops below one frame
+     * step and the image bounces on every frame, this caps the cost. Bounces
+     * further apart than this are unaffected.
+     */
+    private static final long TINT_MIN_INTERVAL_MS = 50L;
+
+    /** Draw size floor, in case a profile holds a value outside the config range. */
+    private static final int MIN_DRAW_SIZE = 1;
 
     private final Client client;
     private final DvdBouncePlugin plugin;
@@ -58,9 +75,15 @@ public class DvdBounceOverlay extends Overlay
     private double directionX = 1;
     private double directionY = 1;
     private long lastFrameNanos;
+    private boolean hasLastFrame;
     private boolean positionInitialized;
 
-    private int bounceCount;
+    /**
+     * Hue rotation to apply, counted in {@link #HUE_STEP} units and wrapped at
+     * {@link #HUE_CYCLE_STEPS}. A corner hit reflects both axes at once and so
+     * advances two steps, which is what "a step per edge" works out to.
+     */
+    private int hueStep;
 
     /**
      * Smoothed frame interval (EMA), used to pick the draw mode. At the
@@ -98,12 +121,13 @@ public class DvdBounceOverlay extends Overlay
     private int scaledHeight;
 
     /**
-     * Tinted copies of the draw-size frames for the current bounce count, so
-     * an animated source is hue-rotated once per frame per bounce instead of
-     * on every frame swap — and only over draw-size pixels.
+     * Tinted copies of the draw-size frames for the current hue, so an animated
+     * source is hue-rotated once per frame per hue change instead of on every
+     * frame swap, and only over draw-size pixels.
      */
     private final Map<BufferedImage, BufferedImage> tintedFrames = new HashMap<>();
-    private int tintedBounceCount = -1;
+    private int tintedStep = -1;
+    private long tintedAtMs;
 
     @Inject
     DvdBounceOverlay(Client client, DvdBouncePlugin plugin, DvdBounceConfig config)
@@ -114,23 +138,23 @@ public class DvdBounceOverlay extends Overlay
         setLayer(OverlayLayer.ALWAYS_ON_TOP);
         setPosition(OverlayPosition.DYNAMIC);
         setPriority(Overlay.PRIORITY_HIGH);
+        // The overlay picks its own position every frame and reports the whole
+        // client as its bounds. Leaving the drag flags on would outline the
+        // entire client in overlay management mode and let a drag on empty
+        // space give it a preferred location that offsets the bounce area.
+        setMovable(false);
+        setSnappable(false);
+        setResettable(false);
     }
 
     @Override
     public Dimension render(Graphics2D graphics)
     {
-        if (client.getCanvas() == null)
-        {
-            return null;
-        }
-
-        // In stretched mode overlays draw on the pre-stretch surface, whose size
-        // is the real dimensions — the AWT canvas is the post-stretch window.
-        Dimension canvas = client.isStretchedEnabled()
-            ? client.getRealDimensions()
-            : client.getCanvas().getSize();
-        int canvasWidth = canvas.width;
-        int canvasHeight = canvas.height;
+        // Overlays draw onto the client's own raster, which is the pre-stretch
+        // surface in stretched mode. Its size is the client canvas size, not
+        // the AWT component size.
+        int canvasWidth = client.getCanvasWidth();
+        int canvasHeight = client.getCanvasHeight();
         if (canvasWidth <= 0 || canvasHeight <= 0)
         {
             return null;
@@ -142,8 +166,11 @@ public class DvdBounceOverlay extends Overlay
             return null;
         }
 
-        int drawWidth = Math.min(config.imageSize(), canvasWidth);
-        int drawHeight = Math.max(1,
+        // The config range keeps this sane, but a hand-edited profile can hold
+        // anything, and a zero or negative draw size would throw from here on.
+        int requestedWidth = Math.max(MIN_DRAW_SIZE, config.imageSize());
+        int drawWidth = Math.min(requestedWidth, canvasWidth);
+        int drawHeight = Math.max(MIN_DRAW_SIZE,
             (int) Math.round((double) drawWidth * source.getHeight() / source.getWidth()));
         drawHeight = Math.min(drawHeight, canvasHeight);
 
@@ -153,12 +180,12 @@ public class DvdBounceOverlay extends Overlay
             paused = false;
             // No time accrued across the pause: motion resumes from the
             // frozen spot instead of jumping ahead.
-            lastFrameNanos = 0;
+            hasLastFrame = false;
         }
 
         if (paused)
         {
-            lastFrameNanos = 0;
+            hasLastFrame = false;
         }
         else
         {
@@ -169,7 +196,7 @@ public class DvdBounceOverlay extends Overlay
         // return their single frame. While paused the clock freezes too.
         BufferedImage frame = source.frameAt(paused ? pausedClockMs : nowMs);
         BufferedImage scaled = scaledFor(source, frame, drawWidth, drawHeight);
-        BufferedImage image = config.colourShift() ? tintedFor(scaled) : scaled;
+        BufferedImage image = config.colourShift() ? tintedFor(scaled, nowMs) : scaled;
 
         if (useSubPixel())
         {
@@ -186,17 +213,17 @@ public class DvdBounceOverlay extends Overlay
     }
 
     /**
-     * Reset transient run state when the plugin starts. The overlay is a
-     * singleton, so a pause captured before the plugin was toggled off
-     * (mid-hop) would otherwise leak into the next start and freeze the logo
-     * until another hop completes; the stale frame timer would fold the
-     * whole downtime into one jump.
+     * Reset the run state that must not survive a plugin toggle: the pause
+     * flags, the frame timer and the measured frame rate. The overlay is a
+     * singleton, so a pause captured mid-hop would otherwise still be set on
+     * the next start. Position, direction and hue are deliberately kept, so
+     * the logo carries on from where it was rather than jumping.
      */
     void resetState()
     {
         paused = false;
         resumeAtMs = Long.MAX_VALUE;
-        lastFrameNanos = 0;
+        hasLastFrame = false;
         avgFrameSeconds = 0;
         subPixel = false;
     }
@@ -210,6 +237,7 @@ public class DvdBounceOverlay extends Overlay
         scaledFrames.clear();
         tintedFrames.clear();
         scaledSource = null;
+        tintedStep = -1;
     }
 
     /**
@@ -286,21 +314,27 @@ public class DvdBounceOverlay extends Overlay
 
     /**
      * Move the image along its 45-degree path, folding the traveled distance
-     * exactly into the reflected path. Any frame gap — a world hop, a client
-     * freeze, a laptop resume — resumes the image where it would be had it
-     * kept flying the whole time, bounces included.
+     * exactly into the reflected path. A gap between frames, from a world hop,
+     * a client freeze or a laptop resume, puts the image where it would be had
+     * it kept moving the whole time, bounces included.
      */
     private void advancePosition(int travelWidth, int travelHeight)
     {
         long now = System.nanoTime();
-        double dt = lastFrameNanos == 0 ? 0 : (now - lastFrameNanos) / 1e9;
+        // nanoTime is monotonic within a JVM, but the max() means a backwards
+        // step could never drive the position negative.
+        double dt = hasLastFrame ? Math.max(0, (now - lastFrameNanos) / 1e9) : 0;
         lastFrameNanos = now;
+        hasLastFrame = true;
 
         travelWidth = Math.max(0, travelWidth);
         travelHeight = Math.max(0, travelHeight);
 
         if (!positionInitialized)
         {
+            // Fixed fractions rather than a random spot: the start is well
+            // clear of the edges and repeats across sessions, so the first
+            // bounce is never immediate and the motion is reproducible.
             x = travelWidth * 0.31;
             y = travelHeight * 0.73;
             positionInitialized = true;
@@ -321,7 +355,7 @@ public class DvdBounceOverlay extends Overlay
         y = state[0];
         directionY = state[1];
 
-        bounceCount += bouncesX + bouncesY;
+        hueStep = (int) ((hueStep + (long) bouncesX + bouncesY) % HUE_CYCLE_STEPS);
     }
 
     /**
@@ -397,19 +431,24 @@ public class DvdBounceOverlay extends Overlay
     }
 
     /**
-     * The draw-size frame with the current bounce count's hue rotation
-     * applied. Cached per frame until the next bounce changes the hue; the
-     * size guard sheds stale entries when the source frames change.
+     * The draw-size frame with the current hue rotation applied. The cache is
+     * dropped when the hue moves on, but no more often than
+     * {@link #TINT_MIN_INTERVAL_MS}, so a bounce on every frame cannot make
+     * this walk the image pixels 60 times a second. A negative
+     * {@link #tintedStep} means no tint is cached yet and the interval does
+     * not apply, since the monotonic clock's epoch is arbitrary.
      */
-    private BufferedImage tintedFor(BufferedImage source)
+    private BufferedImage tintedFor(BufferedImage source, long nowMs)
     {
-        if (tintedBounceCount != bounceCount || tintedFrames.size() > 32)
+        if (tintedStep != hueStep
+            && (tintedStep < 0 || nowMs - tintedAtMs >= TINT_MIN_INTERVAL_MS))
         {
             tintedFrames.clear();
-            tintedBounceCount = bounceCount;
+            tintedStep = hueStep;
+            tintedAtMs = nowMs;
         }
 
-        float hueShift = (bounceCount * HUE_STEP) % 1f;
+        float hueShift = (tintedStep * HUE_STEP) % 1f;
         return tintedFrames.computeIfAbsent(source, f -> hueRotate(f, hueShift));
     }
 

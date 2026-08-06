@@ -31,9 +31,12 @@ import lombok.RequiredArgsConstructor;
  * Fixed speed presets tuned to stay judder-free at the client's standard
  * 60 fps: multiples of 60 px/s advance a whole number of pixels every frame,
  * and the slower presets (60/k px/s) advance exactly one pixel every k
- * frames — both perfectly regular pacing, so slow motion never judders from
- * sub-pixel steps landing on irregular frames. Higher or uncapped frame
- * rates oversample the motion and look smooth with any preset.
+ * frames. Both pace evenly, so slow motion never judders from sub-pixel
+ * steps landing on irregular frames. Higher or uncapped frame rates
+ * oversample the motion and look smooth with any preset.
+ * <p>
+ * The number is the speed along each axis. Motion is at 45 degrees, so travel
+ * along the diagonal is the preset times the square root of 2.
  */
 @Getter
 @RequiredArgsConstructor

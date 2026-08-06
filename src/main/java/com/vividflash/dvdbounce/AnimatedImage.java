@@ -42,22 +42,35 @@ import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 
 /**
- * An image with one or more frames. Static formats (PNG, JPG, BMP, ...) load as
- * a single frame; animated GIFs are composited into full frames with per-frame
- * delays so a renderer can pick the frame for any elapsed time. Decoding uses
- * only the JRE's ImageIO — no third-party codecs.
+ * An image with one or more frames. Static formats (PNG, JPG, BMP and so on)
+ * load as a single frame; animated GIFs are composited into full frames with
+ * per-frame delays so a renderer can pick the frame for any elapsed time.
+ * Decoding uses the JRE's ImageIO and nothing else.
  */
 @Slf4j
 final class AnimatedImage
 {
     /**
-     * Hard caps so a pathological GIF cannot eat the client's heap: decoded
-     * frames are uncompressed ARGB (4 bytes per pixel), so a long high-res
-     * animation multiplies out quickly. Decoding stops at whichever cap is
-     * hit first and the animation simply loops over the frames kept.
+     * Caps on what a file may make this allocate. Decoded pixels are 4 bytes
+     * each, so the numbers below are what actually bounds the memory a chosen
+     * image can cost:
+     * <ul>
+     *   <li>{@link #MAX_DECODE_PIXELS} refuses a source larger than ImageIO
+     *   should be asked to expand, before any buffer is allocated;</li>
+     *   <li>{@link #MAX_GIF_CANVAS_PIXELS} bounds the compositing canvas, which
+     *   is sized from the GIF header rather than from any decoded frame, and
+     *   which a restoreToPrevious frame doubles;</li>
+     *   <li>{@link #MAX_FRAMES} bounds how many frames are kept, each already
+     *   downscaled by the caller's dimension cap;</li>
+     *   <li>{@link #MAX_TOTAL_BYTES} is the backstop for callers that ask for
+     *   no downscale, where frame size is otherwise only bounded by the
+     *   canvas cap.</li>
+     * </ul>
      */
     private static final int MAX_FRAMES = 10;
     private static final long MAX_TOTAL_BYTES = 24L * 1024 * 1024;
+    private static final long MAX_DECODE_PIXELS = 4096L * 4096L;
+    private static final long MAX_GIF_CANVAS_PIXELS = 2048L * 2048L;
 
     /**
      * GIFs commonly declare 0 delay; browsers render those at ~100 ms per
@@ -100,13 +113,13 @@ final class AnimatedImage
     }
 
     /**
-     * Load an image file, decoding all frames if it is an animated GIF.
-     * Animated frames are downscaled to {@code maxAnimDimension} on their
-     * longest side, static images to {@code maxStaticDimension}; pass 0 to
-     * leave the respective size untouched. Returns null when no ImageIO
-     * reader recognises the file.
+     * Load an image file, decoding all frames if it is an animated GIF. Frames
+     * are downscaled to {@code maxDimension} on their longest side; pass 0 to
+     * leave the size untouched. Returns null when no ImageIO reader recognises
+     * the file, or when the source is larger than {@link #MAX_DECODE_PIXELS}.
+     * A GIF whose declared canvas is too large loads as its first frame only.
      */
-    static AnimatedImage load(File file, int maxAnimDimension, int maxStaticDimension) throws IOException
+    static AnimatedImage load(File file, int maxDimension) throws IOException
     {
         try (ImageInputStream input = ImageIO.createImageInputStream(file))
         {
@@ -123,13 +136,26 @@ final class AnimatedImage
             try
             {
                 reader.setInput(input);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if ((long) width * height > MAX_DECODE_PIXELS)
+                {
+                    log.debug("Image is {}x{}, above the {} pixel decode cap",
+                        width, height, MAX_DECODE_PIXELS);
+                    return null;
+                }
+
                 int frameCount = "gif".equalsIgnoreCase(reader.getFormatName())
                     ? reader.getNumImages(true) : 1;
-                if (frameCount <= 1)
+                if (frameCount > 1)
                 {
-                    return of(downscale(reader.read(0), maxStaticDimension));
+                    AnimatedImage animated = decodeGif(reader, frameCount, maxDimension);
+                    if (animated != null)
+                    {
+                        return animated;
+                    }
                 }
-                return decodeGif(reader, frameCount, maxAnimDimension);
+                return of(downscale(reader.read(0), maxDimension));
             }
             finally
             {
@@ -177,7 +203,9 @@ final class AnimatedImage
      * Composite a multi-frame GIF into standalone full frames. GIF frames are
      * often partial diffs positioned inside a logical screen, so each frame is
      * drawn onto a persistent canvas and the canvas snapshotted, honouring the
-     * frame's disposal method before the next one.
+     * frame's disposal method before the next one. Returns null when the
+     * declared canvas is above {@link #MAX_GIF_CANVAS_PIXELS}, leaving the
+     * caller to fall back to a single frame.
      */
     private static AnimatedImage decodeGif(ImageReader reader, int frameCount, int maxDimension)
         throws IOException
@@ -197,6 +225,12 @@ final class AnimatedImage
             canvasWidth = reader.getWidth(0);
             canvasHeight = reader.getHeight(0);
         }
+        if ((long) canvasWidth * canvasHeight > MAX_GIF_CANVAS_PIXELS)
+        {
+            log.debug("GIF declares a {}x{} canvas, above the {} pixel cap; using one frame",
+                canvasWidth, canvasHeight, MAX_GIF_CANVAS_PIXELS);
+            return null;
+        }
 
         BufferedImage canvas = new BufferedImage(canvasWidth, canvasHeight,
             BufferedImage.TYPE_INT_ARGB);
@@ -207,7 +241,9 @@ final class AnimatedImage
         for (int i = 0; i < frameCount; i++)
         {
             BufferedImage frame = reader.read(i);
-            Node tree = reader.getImageMetadata(i).getAsTree("javax_imageio_gif_image_1.0");
+            IIOMetadata frameMetadata = reader.getImageMetadata(i);
+            Node tree = frameMetadata == null
+                ? null : frameMetadata.getAsTree("javax_imageio_gif_image_1.0");
             Node descriptor = findNode(tree, "ImageDescriptor");
             Node control = findNode(tree, "GraphicControlExtension");
             int x = intAttribute(descriptor, "imageLeftPosition", 0);

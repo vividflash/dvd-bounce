@@ -58,7 +58,7 @@ public interface DvdBounceConfig extends Config
     @ConfigItem(
         keyName = "bounceSpeed",
         name = "Speed",
-        description = "How fast the image travels, from Ultra slow (15 px/s) to Ultra fast (600 px/s). Fixed steps chosen to stay judder-free at 60 fps; higher or uncapped frame rates are smooth with any of them.",
+        description = "How fast the image moves on each axis, from Ultra slow (15 px/s) to Ultra fast (600 px/s). Travel is at 45 degrees, so along the diagonal it covers about 1.4x those numbers. Fixed steps chosen to stay judder-free at 60 fps; higher or uncapped frame rates are smooth with any of them.",
         position = 2
     )
     default BounceSpeed bounceSpeed()
@@ -80,7 +80,7 @@ public interface DvdBounceConfig extends Config
     @ConfigItem(
         keyName = "colourShift",
         name = "Colour shift on bounce",
-        description = "Rotate the image's colours a step every time it bounces off an edge, like the DVD logo",
+        description = "Rotate the image's colours a step every time it bounces off an edge, like the DVD logo. A corner hits two edges at once and so shifts two steps.",
         position = 3
     )
     default boolean colourShift()

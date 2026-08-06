@@ -63,8 +63,7 @@ public class DvdBouncePlugin extends Plugin
     private static final int MAX_SOURCE_DIMENSION = 512;
 
     /**
-     * All file I/O is restricted to this plugin-specific subfolder under
-     * .runelite (Plugin Hub requirement). Created on startup so users can
+     * The only folder this plugin reads from. Created on startup so users can
      * drop their image into it.
      */
     private static final File PLUGIN_DIR = new File(RuneLite.RUNELITE_DIR, "dvd-bounce");
@@ -72,18 +71,42 @@ public class DvdBouncePlugin extends Plugin
     private static final String CONFIG_GROUP = "dvdbounce";
     private static final String CUSTOM_IMAGE_KEY = "customImagePath";
     private static final String LAST_SEEN_VERSION_KEY = "lastSeenVersion";
-    private static final String GIF_NOTICE_KEY = "gifNoticeShown";
-    private static final String MIGRATION_KEY = "migratedV14";
 
-    /** Config items removed by earlier versions; cleared from profiles once. */
-    private static final String[] DEAD_KEYS = {"speed", "cornerFlash"};
+    /**
+     * Marks a profile as having been shown one update notice. The key name is
+     * the one 1.4 introduced, kept so profiles that already saw that notice are
+     * not told again. A profile without it is shown {@link #UPDATE_MESSAGE}
+     * once, which covers installs predating the mechanism and also means a
+     * fresh install sees the current version's notice on its first login.
+     */
+    private static final String FIRST_NOTICE_KEY = "gifNoticeShown";
+
+    /**
+     * Records which release last swept {@link #DEAD_KEYS}. Version-stamped
+     * rather than a flag, so a later release can add keys and sweep again.
+     */
+    private static final String MIGRATION_KEY = "migratedVersion";
+    private static final String MIGRATION_VERSION = "1.4";
+
+    /**
+     * The boolean marker 1.4 used before {@link #MIGRATION_KEY}. A profile
+     * carrying it has had the 1.4 sweep, so it counts as
+     * {@link #MIGRATION_VERSION}.
+     */
+    private static final String LEGACY_MIGRATION_KEY = "migratedV14";
+
+    /**
+     * Config items removed by earlier versions; cleared from profiles by the
+     * sweep. Add to this and bump {@link #MIGRATION_VERSION} together.
+     */
+    private static final String[] DEAD_KEYS = {"speed", "cornerFlash", LEGACY_MIGRATION_KEY};
 
     /** Keep in sync with build.gradle and runelite-plugin.properties on every release. */
     private static final String VERSION = "1.4";
     private static final String UPDATE_MESSAGE =
         "DVD Bounce v1.4: custom images can now be animated GIFs.";
 
-    /** Near-black dark red for the one-time update notice. */
+    /** Dark red, for legibility against the opaque chatbox background. */
     private static final Color UPDATE_MESSAGE_COLOR = new Color(0x480000);
 
     @Inject
@@ -112,17 +135,24 @@ public class DvdBouncePlugin extends Plugin
     /**
      * The configured custom image, preloaded on the executor at startup and
      * whenever its config key changes, so the overlay's render loop never
-     * touches the disk. Null when unset or unloadable — the overlay falls
-     * back to the bundled placeholder.
+     * touches the disk. Null when unset or unloadable, in which case the
+     * overlay falls back to the bundled placeholder.
      */
     private volatile AnimatedImage customImage;
 
     /**
      * Load generation: each (re)load bumps the counter and only the newest
-     * load may publish its result, so a slow decode can't overwrite a newer
-     * config edit — and results arriving after shutDown are dropped.
+     * load may publish its result, so a slow decode cannot overwrite a newer
+     * config edit, and results arriving after shutDown are dropped.
      */
     private final AtomicInteger imageLoadGen = new AtomicInteger();
+
+    /**
+     * Guards the compare-and-publish in {@link #reloadCustomImage()} against
+     * shutDown's invalidate-and-clear, so a load that read the generation just
+     * before shutDown cannot assign afterwards. Held only across field writes.
+     */
+    private final Object imagePublishLock = new Object();
 
     @Override
     protected void startUp()
@@ -145,8 +175,11 @@ public class DvdBouncePlugin extends Plugin
         overlayManager.remove(overlay);
         // Release all decoded frames so a disabled plugin pins no heap; the
         // generation bump also invalidates any load still in flight.
-        imageLoadGen.incrementAndGet();
-        customImage = null;
+        synchronized (imagePublishLock)
+        {
+            imageLoadGen.incrementAndGet();
+            customImage = null;
+        }
         bundledPlaceholder = null;
         overlay.clearImageCaches();
     }
@@ -193,9 +226,9 @@ public class DvdBouncePlugin extends Plugin
     }
 
     /**
-     * One-time post-update notice on first login. Profiles that have never
-     * seen an update notice get it unconditionally once (covers installs
-     * predating this mechanism); afterward it's a normal version comparison.
+     * One-time post-update notice on first login. A profile that has not been
+     * shown a notice before gets one unconditionally; afterward it is a version
+     * comparison. See {@link #FIRST_NOTICE_KEY} for what that first case covers.
      */
     private void maybeAnnounceUpdate()
     {
@@ -208,9 +241,9 @@ public class DvdBouncePlugin extends Plugin
         String lastSeen = configManager.getConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY);
         configManager.setConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY, VERSION);
 
-        if (!Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, GIF_NOTICE_KEY)))
+        if (!Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, FIRST_NOTICE_KEY)))
         {
-            configManager.setConfiguration(CONFIG_GROUP, GIF_NOTICE_KEY, true);
+            configManager.setConfiguration(CONFIG_GROUP, FIRST_NOTICE_KEY, true);
             announce(UPDATE_MESSAGE);
         }
         else if (lastSeen != null && !lastSeen.isEmpty() && !VERSION.equals(lastSeen))
@@ -230,16 +263,23 @@ public class DvdBouncePlugin extends Plugin
     }
 
     /**
-     * Clear config keys retired by earlier versions so they stop lingering
-     * in profiles. Runs once; the framework never re-creates a non-item key.
+     * Clear config keys retired by earlier versions so they stop lingering in
+     * profiles. Runs once per {@link #MIGRATION_VERSION}; the framework never
+     * re-creates a non-item key.
      */
     private void migrateOnce()
     {
-        if (Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, MIGRATION_KEY)))
+        String swept = configManager.getConfiguration(CONFIG_GROUP, MIGRATION_KEY);
+        if (swept == null
+            && Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, LEGACY_MIGRATION_KEY)))
+        {
+            swept = MIGRATION_VERSION;
+        }
+        if (MIGRATION_VERSION.equals(swept))
         {
             return;
         }
-        configManager.setConfiguration(CONFIG_GROUP, MIGRATION_KEY, true);
+        configManager.setConfiguration(CONFIG_GROUP, MIGRATION_KEY, MIGRATION_VERSION);
         for (String dead : DEAD_KEYS)
         {
             configManager.unsetConfiguration(CONFIG_GROUP, dead);
@@ -249,7 +289,7 @@ public class DvdBouncePlugin extends Plugin
     /**
      * Resolve the image to bounce: the preloaded custom image if configured
      * and loadable, otherwise the bundled placeholder. Called from the
-     * overlay every frame; never does any I/O — loading happens on the
+     * overlay every frame, and never does any I/O; loading happens on the
      * executor via {@link #reloadCustomImage()}.
      */
     AnimatedImage resolveSourceImage()
@@ -278,22 +318,28 @@ public class DvdBouncePlugin extends Plugin
                     File imageFile = resolvePluginFile(name);
                     if (imageFile != null && imageFile.isFile())
                     {
-                        loaded = AnimatedImage.load(imageFile,
-                            MAX_SOURCE_DIMENSION, MAX_SOURCE_DIMENSION);
+                        loaded = AnimatedImage.load(imageFile, MAX_SOURCE_DIMENSION);
                     }
                     if (loaded == null)
                     {
                         log.warn("Could not load custom image from {}, falling back to placeholder: {}", PLUGIN_DIR, name);
                     }
                 }
-                catch (IOException e)
+                catch (IOException | RuntimeException e)
                 {
+                    // ImageIO throws unchecked on malformed pixel data as well
+                    // as IOException on unreadable files. Either way the load
+                    // yields null and the placeholder takes over.
+                    loaded = null;
                     log.warn("Failed to read custom image, falling back to placeholder: {}", name, e);
                 }
             }
-            if (gen == imageLoadGen.get())
+            synchronized (imagePublishLock)
             {
-                customImage = loaded;
+                if (gen == imageLoadGen.get())
+                {
+                    customImage = loaded;
+                }
             }
         });
     }
