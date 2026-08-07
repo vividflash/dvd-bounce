@@ -102,9 +102,9 @@ public class DvdBouncePlugin extends Plugin
     private static final String[] DEAD_KEYS = {"speed", "cornerFlash", LEGACY_MIGRATION_KEY};
 
     /** Keep in sync with build.gradle and runelite-plugin.properties on every release. */
-    private static final String VERSION = "1.5";
+    private static final String VERSION = "1.5.1";
     private static final String UPDATE_MESSAGE =
-        "DVD Bounce v1.5: broken or oversized custom images now fall back to the bundled logo, and the overlay no longer gets in the way of overlay management.";
+        "DVD Bounce v1.5.1: broken or oversized custom images now fall back to the bundled logo, and the overlay no longer gets in the way of overlay management.";
 
     /** Dark red, for legibility against the opaque chatbox background. */
     private static final Color UPDATE_MESSAGE_COLOR = new Color(0x480000);

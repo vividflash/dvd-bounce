@@ -67,8 +67,8 @@ final class AnimatedImage
      *   canvas cap.</li>
      * </ul>
      */
-    private static final int MAX_FRAMES = 10;
-    private static final long MAX_TOTAL_BYTES = 24L * 1024 * 1024;
+    private static final int MAX_FRAMES = 30;
+    private static final long MAX_TOTAL_BYTES = 32L * 1024 * 1024;
     private static final long MAX_DECODE_PIXELS = 4096L * 4096L;
     private static final long MAX_GIF_CANVAS_PIXELS = 2048L * 2048L;
 

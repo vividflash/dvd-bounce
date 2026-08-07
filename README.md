@@ -28,7 +28,7 @@ corner.
 
 Animated GIFs play, looping continuously. To keep memory bounded, frames are
 downscaled to at most 512 px on their longest side and long animations are
-truncated to the first 10 frames. A GIF that declares a canvas larger than
+truncated to the first 30 frames. A GIF that declares a canvas larger than
 2048x2048 loads as a single frame, and any source larger than 4096x4096 falls
 back to the bundled placeholder.
 

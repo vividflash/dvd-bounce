@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'com.vividflash'
-version = '1.5'
+version = '1.5.1'
 
 // Pinned rather than 'latest.release' so local builds resolve the same client
 // every time. Only affects development: build=standard means the Plugin Hub
