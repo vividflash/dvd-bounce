@@ -26,6 +26,7 @@ package com.vividflash.dvdbounce;
 
 import java.awt.AlphaComposite;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -62,9 +63,10 @@ final class AnimatedImage
      *   which a restoreToPrevious frame doubles;</li>
      *   <li>{@link #MAX_FRAMES} bounds how many frames are kept, each already
      *   downscaled by the caller's dimension cap;</li>
-     *   <li>{@link #MAX_TOTAL_BYTES} is the backstop for callers that ask for
-     *   no downscale, where frame size is otherwise only bounded by the
-     *   canvas cap.</li>
+     *   <li>{@link #MAX_TOTAL_BYTES} stops a GIF accumulating frames past a
+     *   total size, which matters most for a caller that asks for no
+     *   downscale, where a frame is otherwise bounded only by the canvas
+     *   cap.</li>
      * </ul>
      */
     private static final int MAX_FRAMES = 30;
@@ -73,10 +75,12 @@ final class AnimatedImage
     private static final long MAX_GIF_CANVAS_PIXELS = 2048L * 2048L;
 
     /**
-     * GIFs commonly declare 0 delay; browsers render those at ~100 ms per
-     * frame, so match that rather than spinning through frames instantly.
+     * A declared frame delay below this is not believed, and
+     * {@link #DEFAULT_DELAY_MS} is used instead. GIFs commonly declare 0, and
+     * browsers render those at about 100 ms per frame rather than spinning
+     * through them instantly.
      */
-    private static final int MIN_DELAY_MS = 20;
+    private static final int MIN_DECLARED_DELAY_MS = 20;
     private static final int DEFAULT_DELAY_MS = 100;
 
     private final BufferedImage[] frames;
@@ -84,9 +88,19 @@ final class AnimatedImage
     private final int[] frameEndTimesMs;
     private final int totalDurationMs;
 
+    /**
+     * The part of the image that is not fully transparent, in frame pixels,
+     * covering every frame. Item sprites sit in a 36x32 box with padding around
+     * them, so a renderer that bounces the whole box turns the picture around
+     * before the visible part reaches the edge. Measured once here rather than
+     * trimmed, so no pixel is lost.
+     */
+    private final Rectangle ink;
+
     private AnimatedImage(List<BufferedImage> frameList, List<Integer> delaysMs)
     {
         frames = frameList.toArray(new BufferedImage[0]);
+        ink = inkBounds(frames);
         frameEndTimesMs = new int[frames.length];
         int total = 0;
         for (int i = 0; i < frames.length; i++)
@@ -102,6 +116,65 @@ final class AnimatedImage
         frames = new BufferedImage[]{single};
         frameEndTimesMs = new int[]{0};
         totalDurationMs = 0;
+        ink = inkBounds(frames);
+    }
+
+    /**
+     * The bounds of everything that is not fully transparent, across all
+     * frames. An image with nothing in it reports its full size, so a caller
+     * never has to handle an empty box.
+     */
+    private static Rectangle inkBounds(BufferedImage[] frames)
+    {
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int maxX = -1;
+        int maxY = -1;
+        for (BufferedImage frame : frames)
+        {
+            int width = frame.getWidth();
+            int height = frame.getHeight();
+            int[] pixels = frame.getRGB(0, 0, width, height, null, 0, width);
+            for (int y = 0; y < height; y++)
+            {
+                int row = y * width;
+                for (int x = 0; x < width; x++)
+                {
+                    if ((pixels[row + x] & 0xFF000000) != 0)
+                    {
+                        minX = Math.min(minX, x);
+                        maxX = Math.max(maxX, x);
+                        minY = Math.min(minY, y);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+            }
+        }
+        if (maxX < 0)
+        {
+            return new Rectangle(0, 0, frames[0].getWidth(), frames[0].getHeight());
+        }
+        return new Rectangle(minX, minY, maxX - minX + 1, maxY - minY + 1);
+    }
+
+    int getInkX()
+    {
+        return ink.x;
+    }
+
+    int getInkY()
+    {
+        return ink.y;
+    }
+
+    int getInkWidth()
+    {
+        return ink.width;
+    }
+
+    int getInkHeight()
+    {
+        return ink.height;
     }
 
     /**
@@ -113,11 +186,26 @@ final class AnimatedImage
     }
 
     /**
+     * A source with more pixels than {@link #MAX_DECODE_PIXELS}. Separate from
+     * the other failures so a caller can tell the user their file is too big,
+     * rather than blaming its name or format.
+     */
+    static final class TooLargeException extends IOException
+    {
+        TooLargeException(int width, int height)
+        {
+            super("image is " + width + "x" + height + ", above the "
+                + MAX_DECODE_PIXELS + " pixel cap");
+        }
+    }
+
+    /**
      * Load an image file, decoding all frames if it is an animated GIF. Frames
      * are downscaled to {@code maxDimension} on their longest side; pass 0 to
      * leave the size untouched. Returns null when no ImageIO reader recognises
-     * the file, or when the source is larger than {@link #MAX_DECODE_PIXELS}.
-     * A GIF whose declared canvas is too large loads as its first frame only.
+     * the file, and throws {@link TooLargeException} when the source holds more
+     * than {@link #MAX_DECODE_PIXELS} pixels. A GIF whose declared canvas is
+     * too large loads as its first frame only.
      */
     static AnimatedImage load(File file, int maxDimension) throws IOException
     {
@@ -140,9 +228,7 @@ final class AnimatedImage
                 int height = reader.getHeight(0);
                 if ((long) width * height > MAX_DECODE_PIXELS)
                 {
-                    log.debug("Image is {}x{}, above the {} pixel decode cap",
-                        width, height, MAX_DECODE_PIXELS);
-                    return null;
+                    throw new TooLargeException(width, height);
                 }
 
                 int frameCount = "gif".equalsIgnoreCase(reader.getFormatName())
@@ -249,7 +335,7 @@ final class AnimatedImage
             int x = intAttribute(descriptor, "imageLeftPosition", 0);
             int y = intAttribute(descriptor, "imageTopPosition", 0);
             int delayMs = intAttribute(control, "delayTime", 0) * 10;
-            if (delayMs < MIN_DELAY_MS)
+            if (delayMs < MIN_DECLARED_DELAY_MS)
             {
                 delayMs = DEFAULT_DELAY_MS;
             }
