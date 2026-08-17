@@ -55,8 +55,8 @@ import net.runelite.client.util.AsyncBufferedImage;
 @Slf4j
 @PluginDescriptor(
     name = "DVD Bounce",
-    description = "A picture bounces around your client like the DVD screensaver. Will hit the corner.",
-    tags = {"dvd", "bounce", "screensaver", "overlay", "fun"}
+    description = "An item or your own picture bounces around the client like the DVD screensaver. Will hit the corner.",
+    tags = {"dvd", "bounce", "screensaver", "overlay", "item", "fun"}
 )
 public class DvdBouncePlugin extends Plugin
 {
