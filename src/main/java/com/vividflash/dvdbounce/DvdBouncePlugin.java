@@ -655,7 +655,7 @@ public class DvdBouncePlugin extends Plugin
         if (failure.tooLarge)
         {
             announce("DVD Bounce could not use \"" + shown + "\": images are limited to"
-                + " 16 million pixels, whatever their shape, so 4096x4096 or smaller.");
+                + " 16 million pixels (4096x4096).");
             return;
         }
         announce("DVD Bounce could not read \"" + shown + "\" in your .runelite/"
