@@ -51,6 +51,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.AsyncBufferedImage;
+import net.runelite.client.util.ImageUtil;
 
 @Slf4j
 @PluginDescriptor(
@@ -555,21 +556,21 @@ public class DvdBouncePlugin extends Plugin
                     log.warn("Failed to read custom image {}, showing a notice instead", name, e);
                 }
             }
-            // Rasterised outside the lock, which covers only the publish.
+            // Loaded outside the lock, which covers only the publish.
             AnimatedImage notice = null;
             if (loaded == null && wanted)
             {
                 if (name.isEmpty())
                 {
-                    notice = NoticeImage.of("no file name", "set in config");
+                    notice = AnimatedImage.of(ImageUtil.loadImageResource(getClass(), "notice-no-file-name.png"));
                 }
                 else if (tooLarge)
                 {
-                    notice = NoticeImage.of("image too large", "max 16M pixels");
+                    notice = AnimatedImage.of(ImageUtil.loadImageResource(getClass(), "notice-too-large.png"));
                 }
                 else
                 {
-                    notice = NoticeImage.of("wrong filename", "or filetype");
+                    notice = AnimatedImage.of(ImageUtil.loadImageResource(getClass(), "notice-wrong-file.png"));
                 }
             }
 
