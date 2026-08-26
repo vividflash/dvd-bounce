@@ -56,7 +56,7 @@ import net.runelite.client.util.ImageUtil;
 @Slf4j
 @PluginDescriptor(
     name = "DVD Bounce",
-    description = "Item or your own image bounces like the DVD logo",
+    description = "DVD Logo bouncing of any item or your own image",
     tags = {"dvd", "bounce", "screensaver", "overlay", "item", "fun"}
 )
 public class DvdBouncePlugin extends Plugin
@@ -123,7 +123,7 @@ public class DvdBouncePlugin extends Plugin
     private static final String[] DEAD_KEYS = {"speed", "cornerFlash", LEGACY_MIGRATION_KEY,
         "imageSize", "bounceSpeed", "colourShift"};
 
-    /** Keep in sync with build.gradle and runelite-plugin.properties on every release. */
+    /** The release the one-time notice below belongs to, not the packaged version. */
     private static final String VERSION = "1.6";
     private static final String UPDATE_MESSAGE =
         "DVD Bounce v1.6: Added support for in-game items. Added support for opacity. Added support for showing both at the same time. Each picture has its own settings. Replaces the default image with a default item.";

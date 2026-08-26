@@ -3,12 +3,12 @@ plugins {
 }
 
 group = 'com.vividflash'
-version = '1.6'
+version = '1.6.1'
 
 // Pinned rather than 'latest.release' so local builds resolve the same client
 // every time. Only affects development: build=standard means the Plugin Hub
 // replaces this file and builds against its own runelite.version.
-def runeLiteVersion = '1.12.35'
+def runeLiteVersion = '1.12.36'
 
 repositories {
     mavenLocal()
