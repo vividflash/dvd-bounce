@@ -54,11 +54,3 @@ truncated to the first 30 frames. A GIF that declares a canvas larger than
 
 After replacing a file under the same name, tick *Reload image file* to read it
 again.
-
-## License
-
-BSD 2-Clause.
-
----
-
-Co-A: Fable 5
