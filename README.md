@@ -8,7 +8,7 @@ corner.
 - **Bounce an in-game item**: put an item ID in *Item ID* to bounce that item's
   sprite. Defaults to the rubber chicken.
 - **Bring your own image**: drop a PNG, JPG, GIF or BMP into your
-  `.runelite/dvd-bounce` folder and put its file name in *Custom image file*.
+  `.runelite/plugin-data/dvd-bounce` folder and put its file name in *Custom image file*.
   Animated GIFs play while they bounce. A file that cannot be read bounces a
   notice saying so.
 - **Both at once**: the item and your image are separate pictures with separate
@@ -39,7 +39,7 @@ Each picture has its own section with the same settings.
 | Custom image | Default | Notes |
 |---|---|---|
 | Bounce a custom image | off | |
-| Custom image file | *(blank)* | File name inside your `.runelite/dvd-bounce` folder (created when the plugin starts), e.g. `logo.png`. A name that cannot be read bounces a notice saying so, plus one chat line naming the file. |
+| Custom image file | *(blank)* | File name inside your `.runelite/plugin-data/dvd-bounce` folder (created when the plugin starts), e.g. `logo.png`. A name that cannot be read bounces a notice saying so, plus one chat line naming the file. |
 | Reload image file | off | Re-reads the file and applies a name you just typed. Ticking or unticking both trigger it. |
 | Size (px) | 144 | As above. |
 | Opacity | 100% | As above. |

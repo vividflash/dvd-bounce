@@ -26,7 +26,6 @@ package com.vividflash.dvdbounce;
 
 import com.google.inject.Provides;
 import java.awt.Color;
-import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,7 +37,6 @@ import net.runelite.api.GameState;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.gameval.ItemID;
-import net.runelite.client.RuneLite;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.chat.ChatMessageBuilder;
 import net.runelite.client.chat.ChatMessageManager;
@@ -51,13 +49,16 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.util.AsyncBufferedImage;
+import net.runelite.client.util.Filepath;
 import net.runelite.client.util.ImageUtil;
 
 @Slf4j
 @PluginDescriptor(
     name = "DVD Bounce",
     description = "DVD Logo bouncing of any item or your own image",
-    tags = {"dvd", "bounce", "screensaver", "overlay", "item", "fun"}
+    tags = {"dvd", "bounce", "screensaver", "overlay", "item", "fun"},
+    internalName = "dvd-bounce",
+    legacyDataDirectory = "dvd-bounce"
 )
 public class DvdBouncePlugin extends Plugin
 {
@@ -70,9 +71,9 @@ public class DvdBouncePlugin extends Plugin
 
     /**
      * The only folder this plugin reads from. Created on startup so users can
-     * drop their image into it.
+     * drop their image into it. Null when it could not be set up.
      */
-    private static final File PLUGIN_DIR = new File(RuneLite.RUNELITE_DIR, "dvd-bounce");
+    private volatile Filepath pluginDir;
 
     private static final String CONFIG_GROUP = "dvdbounce";
     private static final String CUSTOM_IMAGE_KEY = "customImagePath";
@@ -92,20 +93,11 @@ public class DvdBouncePlugin extends Plugin
     private static final int DEFAULT_ITEM_ID = ItemID.RUBBER_CHICKEN;
 
     /**
-     * Marks a profile as having been shown one update notice. The key name is
-     * the one 1.4 introduced, kept so profiles that already saw that notice are
-     * not told again. A profile without it is shown {@link #UPDATE_MESSAGE}
-     * once, which covers installs predating the mechanism and also means a
-     * fresh install sees the current version's notice on its first login.
-     */
-    private static final String FIRST_NOTICE_KEY = "gifNoticeShown";
-
-    /**
      * Records which release last swept {@link #DEAD_KEYS}. Version-stamped
      * rather than a flag, so a later release can add keys and sweep again.
      */
     private static final String MIGRATION_KEY = "migratedVersion";
-    private static final String MIGRATION_VERSION = "1.6";
+    private static final String MIGRATION_VERSION = "1.7";
 
     /**
      * The boolean marker 1.4 used before {@link #MIGRATION_KEY}. A profile
@@ -121,12 +113,12 @@ public class DvdBouncePlugin extends Plugin
      * sweep. Add to this and bump {@link #MIGRATION_VERSION} together.
      */
     private static final String[] DEAD_KEYS = {"speed", "cornerFlash", LEGACY_MIGRATION_KEY,
-        "imageSize", "bounceSpeed", "colourShift"};
+        "imageSize", "bounceSpeed", "colourShift", "gifNoticeShown"};
 
     /** The release the one-time notice below belongs to, not the packaged version. */
-    private static final String VERSION = "1.6";
+    private static final String VERSION = "1.7";
     private static final String UPDATE_MESSAGE =
-        "DVD Bounce v1.6: Added support for in-game items. Added support for opacity. Added support for showing both at the same time. Each picture has its own settings. Replaces the default image with a default item.";
+        "DVD Bounce v1.7: RuneLite now requires files to use .runelite/plugin-data/dvd-bounce instead, we have moved your files there from .runelite/dvd-bounce.";
 
     /** Dark red, for legibility against the opaque chatbox background. */
     private static final Color NOTICE_COLOR = new Color(0x480000);
@@ -216,9 +208,14 @@ public class DvdBouncePlugin extends Plugin
     protected void startUp()
     {
         updateChecked = false;
-        if (!PLUGIN_DIR.exists() && !PLUGIN_DIR.mkdirs())
+        try
         {
-            log.warn("Could not create plugin folder {}", PLUGIN_DIR);
+            pluginDir = getPluginDirectory();
+            pluginDir.createDirectories();
+        }
+        catch (IOException | RuntimeException e)
+        {
+            log.warn("Could not create plugin folder", e);
         }
         migrateOnce();
         reloadItemImage();
@@ -315,9 +312,9 @@ public class DvdBouncePlugin extends Plugin
     }
 
     /**
-     * One-time post-update notice on first login. A profile that has not been
-     * shown a notice before gets one unconditionally; afterward it is a version
-     * comparison. See {@link #FIRST_NOTICE_KEY} for what that first case covers.
+     * One-time post-update notice on first login. A profile with no recorded
+     * version is a fresh install and is told nothing; afterward it is a version
+     * comparison.
      */
     private void maybeAnnounceUpdate()
     {
@@ -330,12 +327,7 @@ public class DvdBouncePlugin extends Plugin
         String lastSeen = configManager.getConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY);
         configManager.setConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY, VERSION);
 
-        if (!Boolean.parseBoolean(configManager.getConfiguration(CONFIG_GROUP, FIRST_NOTICE_KEY)))
-        {
-            configManager.setConfiguration(CONFIG_GROUP, FIRST_NOTICE_KEY, true);
-            announce(UPDATE_MESSAGE);
-        }
-        else if (lastSeen != null && !lastSeen.isEmpty() && !VERSION.equals(lastSeen))
+        if (lastSeen != null && !lastSeen.isEmpty() && !VERSION.equals(lastSeen))
         {
             announce(UPDATE_MESSAGE);
         }
@@ -370,21 +362,26 @@ public class DvdBouncePlugin extends Plugin
         }
         configManager.setConfiguration(CONFIG_GROUP, MIGRATION_KEY, MIGRATION_VERSION);
 
-        // 1.6 gave each picture its own settings. A profile from before that
-        // had one set of them, applied to whatever it was bouncing, so both
-        // pictures inherit those values and whichever gets switched on looks
-        // the way it used to. Read before the dead keys below are cleared.
-        carryForward("imageSize", "itemSize", "customSize");
-        carryForward("bounceSpeed", "itemSpeed", "customSpeed");
-        carryForward("colourShift", "itemColourShift", "customColourShift");
-
-        // A file name used to be the whole choice of picture, so a profile
-        // holding one keeps bouncing that file and not the item.
-        String configuredFile = configManager.getConfiguration(CONFIG_GROUP, CUSTOM_IMAGE_KEY);
-        if (configuredFile != null && !configuredFile.trim().isEmpty())
+        // Only a profile last swept before 1.6 takes the steps in here. One
+        // swept at 1.6 or later has made its own choice of pictures since.
+        if (swept == null || LEGACY_MIGRATION_VERSION.equals(swept))
         {
-            configManager.setConfiguration(CONFIG_GROUP, CUSTOM_ENABLED_KEY, true);
-            configManager.setConfiguration(CONFIG_GROUP, ITEM_ENABLED_KEY, false);
+            // 1.6 gave each picture its own settings. A profile from before that
+            // had one set of them, applied to whatever it was bouncing, so both
+            // pictures inherit those values and whichever gets switched on looks
+            // the way it used to. Read before the dead keys below are cleared.
+            carryForward("imageSize", "itemSize", "customSize");
+            carryForward("bounceSpeed", "itemSpeed", "customSpeed");
+            carryForward("colourShift", "itemColourShift", "customColourShift");
+
+            // A file name used to be the whole choice of picture, so a profile
+            // holding one keeps bouncing that file and not the item.
+            String configuredFile = configManager.getConfiguration(CONFIG_GROUP, CUSTOM_IMAGE_KEY);
+            if (configuredFile != null && !configuredFile.trim().isEmpty())
+            {
+                configManager.setConfiguration(CONFIG_GROUP, CUSTOM_ENABLED_KEY, true);
+                configManager.setConfiguration(CONFIG_GROUP, ITEM_ENABLED_KEY, false);
+            }
         }
 
         for (String dead : DEAD_KEYS)
@@ -530,14 +527,14 @@ public class DvdBouncePlugin extends Plugin
             {
                 try
                 {
-                    File imageFile = resolvePluginFile(name);
+                    Filepath imageFile = resolvePluginFile(name);
                     if (imageFile != null && imageFile.isFile())
                     {
                         loaded = AnimatedImage.load(imageFile, MAX_SOURCE_DIMENSION);
                     }
                     if (loaded == null)
                     {
-                        log.warn("Could not load custom image {} from {}, showing a notice instead", name, PLUGIN_DIR);
+                        log.warn("Could not load custom image {} from {}, showing a notice instead", name, pluginDir);
                     }
                 }
                 catch (AnimatedImage.TooLargeException e)
@@ -659,8 +656,8 @@ public class DvdBouncePlugin extends Plugin
                 + " 16 million pixels (4096x4096).");
             return;
         }
-        announce("DVD Bounce could not read \"" + shown + "\" in your .runelite/"
-            + PLUGIN_DIR.getName() + " folder."
+        announce("DVD Bounce could not read \"" + shown + "\" in your"
+            + " .runelite/plugin-data/dvd-bounce folder."
             + " Check the file name and that it ends in .png, .jpg, .gif or .bmp.");
     }
 
@@ -686,19 +683,22 @@ public class DvdBouncePlugin extends Plugin
     }
 
     /**
-     * Resolve a configured file name inside the plugin's .runelite subfolder.
+     * Resolve a configured file name inside the plugin's data folder.
      * Only files within that folder are ever read; a name that escapes it
      * (e.g. via "..") resolves to null.
      */
-    private static File resolvePluginFile(String name)
+    private Filepath resolvePluginFile(String name)
     {
+        Filepath dir = pluginDir;
+        if (dir == null)
+        {
+            return null;
+        }
         try
         {
-            File file = new File(PLUGIN_DIR, name);
-            String base = PLUGIN_DIR.getCanonicalPath() + File.separator;
-            return file.getCanonicalPath().startsWith(base) ? file : null;
+            return dir.join(name);
         }
-        catch (IOException e)
+        catch (IllegalArgumentException e)
         {
             return null;
         }

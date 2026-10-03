@@ -150,7 +150,7 @@ public interface DvdBounceConfig extends Config
     @ConfigItem(
         keyName = "customImagePath",
         name = "Custom image file",
-        description = "File name of an image inside your .runelite/dvd-bounce folder (created when the plugin starts). PNG, JPG, GIF, BMP; animated GIFs play. A name that cannot be read bounces a notice saying so.",
+        description = "File name of an image inside your .runelite/plugin-data/dvd-bounce folder (created when the plugin starts). PNG, JPG, GIF, BMP; animated GIFs play. A name that cannot be read bounces a notice saying so.",
         position = 2,
         section = customSection
     )
