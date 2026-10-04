@@ -1,56 +1,50 @@
 # DVD Bounce
 
-An item or your own picture bounces around the client like the DVD screensaver. Will hit the
-corner.
+An item or your own picture bounces around the client like the DVD
+screensaver. Will hit the corner.
 
 ## Features
 
-- **Bounce an in-game item**: put an item ID in *Item ID* to bounce that item's
-  sprite. Defaults to the rubber chicken.
-- **Bring your own image**: drop a PNG, JPG, GIF or BMP into your
-  `.runelite/plugin-data/dvd-bounce` folder and put its file name in *Custom image file*.
-  Animated GIFs play while they bounce. A file that cannot be read bounces a
-  notice saying so.
-- **Both at once**: the item and your image are separate pictures with separate
-  settings, so either or both can be on. They start in different spots and head
-  in different directions.
-- **Colour shift**: the colours rotate a step on every bounce, like the DVD
-  logo. A corner hits two edges, so it shifts two steps.
-- **Size, opacity and speed per picture**: size 24 to 512 px, opacity 10 to
-  100%, and eight speed presets from 15 to 600 px/s per axis.
+The item and your image are separate pictures with separate settings, so
+either or both can be on.
 
-## Configuration
+**General**
 
-| Setting | Default | Notes |
-|---|---|---|
-| FPS mode | Adaptive | Adaptive follows the measured frame rate; Crisp (60fps) forces whole-pixel rendering (sharpest); Smooth (Unlocked) forces sub-pixel rendering for unlocked/high fps. |
+- **FPS mode**: `Adaptive` follows the measured frame rate. `Crisp (60fps)`
+  forces whole-pixel rendering (sharpest). `Smooth (Unlocked)` forces
+  sub-pixel rendering for unlocked or high fps. Default `Adaptive`.
 
-Each picture has its own section with the same settings.
+**Item**
 
-| Item | Default | Notes |
-|---|---|---|
-| Bounce an item | on | |
-| Item ID | 4566 (Rubber chicken) | The item whose sprite bounces. An ID with no item falls back to the rubber chicken. |
-| Size (px) | 144 | Width; height follows the aspect ratio. Item sprites are 36x32, so larger sizes are scaled up and look blurry. |
-| Opacity | 100% | How solid the picture is, from 10 to 100. |
-| Speed | Classic | Ultra slow to Ultra fast (15-600 px/s per axis; travel is at 45 degrees, so about 1.4x that along the diagonal). Steps stay evenly paced at 60 fps, so slow speeds don't judder. |
-| Colour shift on bounce | on | |
+- **Bounce an item**: Default `on`.
+- **Colour shift on bounce**: the colours rotate a step on every bounce. A
+  corner hits two edges, so it shifts two steps. Default `on`.
+- **Item ID**: the item whose sprite bounces. An ID with no item falls back
+  to the rubber chicken. Default `4566`.
+- **Opacity**: 10 to 100%. Default `100%`.
+- **Size (px)**: width, 24 to 512; height follows the aspect ratio. Item
+  sprites are 36x32, so larger sizes are scaled up and look blurry. Default
+  `144`.
+- **Speed**: `Ultra slow` to `Ultra fast`, 15 to 600 px/s per axis. Travel
+  is at 45 degrees, so about 1.4x that along the diagonal. Default
+  `Classic` (180).
 
-| Custom image | Default | Notes |
-|---|---|---|
-| Bounce a custom image | off | |
-| Custom image file | *(blank)* | File name inside your `.runelite/plugin-data/dvd-bounce` folder (created when the plugin starts), e.g. `logo.png`. A name that cannot be read bounces a notice saying so, plus one chat line naming the file. |
-| Reload image file | off | Re-reads the file and applies a name you just typed. Ticking or unticking both trigger it. |
-| Size (px) | 144 | As above. |
-| Opacity | 100% | As above. |
-| Speed | Classic | As above. |
-| Colour shift on bounce | on | |
+**Custom image**
 
-Animated GIFs play, looping continuously. To keep memory bounded, frames are
-downscaled to at most 512 px on their longest side and long animations are
-truncated to the first 30 frames. A GIF that declares a canvas larger than
-2048x2048 loads as a single frame, and any source above 16 million pixels
-(4096x4096) shows the notice instead.
+- **Bounce a custom image**: Default `off`.
+- **Colour shift on bounce**: as for the item. Default `on`.
+- **Custom image file**: a PNG, JPG, GIF or BMP file name inside your
+  `.runelite/plugin-data/dvd-bounce` folder, which is created when the
+  plugin starts, e.g. `logo.png`. A name that cannot be read bounces a
+  notice saying so, plus one chat line naming the file. Default blank.
+- **Opacity**: as for the item. Default `100%`.
+- **Reload image file**: re-reads the file and applies a name you just
+  typed. Ticking or unticking both trigger it. After replacing a file under
+  the same name, use it to read the file again.
+- **Size (px)**: as for the item. Default `144`.
+- **Speed**: as for the item. Default `Classic`.
 
-After replacing a file under the same name, tick *Reload image file* to read it
-again.
+Animated GIFs loop continuously. Frames are downscaled to at most 512 px on
+their longest side and animations are cut to the first 30 frames. A GIF that
+declares a canvas larger than 2048x2048 loads as a single frame, and any
+source above 16 million pixels (4096x4096) shows the notice instead.
