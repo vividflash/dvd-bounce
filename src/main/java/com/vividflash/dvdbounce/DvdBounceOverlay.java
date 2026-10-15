@@ -125,6 +125,7 @@ public class DvdBounceOverlay extends Overlay
      */
     private double avgFrameSeconds;
     private boolean subPixel;
+    private Dimension bounds;
 
     /**
      * While paused both pictures freeze in place: position, animation frame and
@@ -207,7 +208,11 @@ public class DvdBounceOverlay extends Overlay
                 drawSubPixel, canvasWidth, canvasHeight);
         }
 
-        return new Dimension(canvasWidth, canvasHeight);
+        if (bounds == null || bounds.width != canvasWidth || bounds.height != canvasHeight)
+        {
+            bounds = new Dimension(canvasWidth, canvasHeight);
+        }
+        return bounds;
     }
 
     /**
@@ -437,6 +442,11 @@ public class DvdBounceOverlay extends Overlay
         private double directionY;
         private boolean positionInitialized;
 
+        // Scratch state for fold() and the sub-pixel draw, reused so a frame
+        // allocates nothing.
+        private final double[] foldState = new double[2];
+        private final AffineTransform translation = new AffineTransform();
+
         /**
          * Hue rotation to apply, counted in {@link #HUE_STEP} units and wrapped
          * at {@link #HUE_CYCLE_STEPS}. A corner hit reflects both axes at once
@@ -542,8 +552,8 @@ public class DvdBounceOverlay extends Overlay
             {
                 graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                     RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                graphics.drawImage(image,
-                    AffineTransform.getTranslateInstance(x - inkLeft, y - inkTop), null);
+                translation.setToTranslation(x - inkLeft, y - inkTop);
+                graphics.drawImage(image, translation, null);
             }
             else
             {
@@ -583,7 +593,9 @@ public class DvdBounceOverlay extends Overlay
 
             double step = speed.get().getPixelsPerSecond() * dt;
 
-            double[] state = {x, directionX};
+            double[] state = foldState;
+            state[0] = x;
+            state[1] = directionX;
             int bouncesX = fold(state, travelWidth, step);
             x = state[0];
             directionX = state[1];
@@ -619,27 +631,36 @@ public class DvdBounceOverlay extends Overlay
                 scaledOpacity = opacity;
             }
 
-            return scaledFrames.computeIfAbsent(frame, f ->
+            BufferedImage scaled = scaledFrames.get(frame);
+            if (scaled == null)
             {
-                if (f.getWidth() == width && f.getHeight() == height && opacity >= FULL_OPACITY)
-                {
-                    return f;
-                }
-                BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-                Graphics2D g = scaled.createGraphics();
-                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                    RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-                if (opacity < FULL_OPACITY)
-                {
-                    // Drawn onto an empty image, so this multiplies the
-                    // source's own alpha rather than blending against anything.
-                    g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,
-                        opacity / (float) FULL_OPACITY));
-                }
-                g.drawImage(f, 0, 0, width, height, null);
-                g.dispose();
-                return scaled;
-            });
+                scaled = scaleFrame(frame, width, height, opacity);
+                scaledFrames.put(frame, scaled);
+            }
+            return scaled;
+        }
+
+        private static BufferedImage scaleFrame(BufferedImage f, int width, int height,
+            int opacity)
+        {
+            if (f.getWidth() == width && f.getHeight() == height && opacity >= FULL_OPACITY)
+            {
+                return f;
+            }
+            BufferedImage scaled = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = scaled.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            if (opacity < FULL_OPACITY)
+            {
+                // Drawn onto an empty image, so this multiplies the
+                // source's own alpha rather than blending against anything.
+                g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER,
+                    opacity / (float) FULL_OPACITY));
+            }
+            g.drawImage(f, 0, 0, width, height, null);
+            g.dispose();
+            return scaled;
         }
 
         /**
@@ -667,7 +688,13 @@ public class DvdBounceOverlay extends Overlay
             }
 
             float hueShift = (tintedStep * HUE_STEP) % 1f;
-            return tintedFrames.computeIfAbsent(source, f -> hueRotate(f, hueShift));
+            BufferedImage tinted = tintedFrames.get(source);
+            if (tinted == null)
+            {
+                tinted = hueRotate(source, hueShift);
+                tintedFrames.put(source, tinted);
+            }
+            return tinted;
         }
     }
 }
