@@ -38,14 +38,14 @@ public interface DvdBounceConfig extends Config
     @ConfigSection(
         name = "Item",
         description = "",
-        position = 1
+        position = 20
     )
     String itemSection = "itemSection";
 
     @ConfigSection(
         name = "Custom image",
         description = "",
-        position = 2
+        position = 30
     )
     String customSection = "customSection";
 
@@ -53,7 +53,7 @@ public interface DvdBounceConfig extends Config
         keyName = "fpsMode",
         name = "FPS mode",
         description = "Crisp snaps to whole pixels, best at 60 fps. Smooth draws at sub-pixel positions, best at high fps. Adaptive picks by measured frame rate.",
-        position = 0
+        position = 10
     )
     default FpsMode fpsMode()
     {
@@ -64,7 +64,7 @@ public interface DvdBounceConfig extends Config
         keyName = "itemEnabled",
         name = "Bounce an item",
         description = "",
-        position = 1,
+        position = 10,
         section = itemSection
     )
     default boolean itemEnabled()
@@ -76,7 +76,7 @@ public interface DvdBounceConfig extends Config
         keyName = "itemId",
         name = "Item ID",
         description = "An unknown ID falls back to the rubber chicken.",
-        position = 2,
+        position = 20,
         section = itemSection
     )
     default int itemId()
@@ -88,7 +88,7 @@ public interface DvdBounceConfig extends Config
         keyName = "itemSize",
         name = "Size (px)",
         description = "Width. Item sprites are 36x32, so bigger sizes soften them.",
-        position = 3,
+        position = 30,
         section = itemSection
     )
     @Range(min = 24, max = 512)
@@ -101,7 +101,7 @@ public interface DvdBounceConfig extends Config
         keyName = "itemOpacity",
         name = "Opacity",
         description = "",
-        position = 4,
+        position = 40,
         section = itemSection
     )
     @Range(min = 10, max = 100)
@@ -115,7 +115,7 @@ public interface DvdBounceConfig extends Config
         keyName = "itemSpeed",
         name = "Speed",
         description = "Per axis, from Ultra slow (15 px/s) to Ultra fast (600 px/s).",
-        position = 5,
+        position = 50,
         section = itemSection
     )
     default BounceSpeed itemSpeed()
@@ -127,7 +127,7 @@ public interface DvdBounceConfig extends Config
         keyName = "itemColourShift",
         name = "Colour shift on bounce",
         description = "",
-        position = 6,
+        position = 60,
         section = itemSection
     )
     default boolean itemColourShift()
@@ -139,7 +139,7 @@ public interface DvdBounceConfig extends Config
         keyName = "customEnabled",
         name = "Bounce a custom image",
         description = "",
-        position = 1,
+        position = 10,
         section = customSection
     )
     default boolean customEnabled()
@@ -151,7 +151,7 @@ public interface DvdBounceConfig extends Config
         keyName = "customImagePath",
         name = "Custom image file",
         description = "File name of an image in .runelite/plugin-data/dvd-bounce. PNG, JPG, GIF or BMP; animated GIFs play.",
-        position = 2,
+        position = 20,
         section = customSection
     )
     default String customImageFile()
@@ -163,7 +163,7 @@ public interface DvdBounceConfig extends Config
         keyName = "reloadImage",
         name = "Reload image file",
         description = "Re-reads the file. Ticking and unticking both reload.",
-        position = 3,
+        position = 30,
         section = customSection
     )
     default boolean reloadImage()
@@ -175,7 +175,7 @@ public interface DvdBounceConfig extends Config
         keyName = "customSize",
         name = "Size (px)",
         description = "Width.",
-        position = 4,
+        position = 40,
         section = customSection
     )
     @Range(min = 24, max = 512)
@@ -188,7 +188,7 @@ public interface DvdBounceConfig extends Config
         keyName = "customOpacity",
         name = "Opacity",
         description = "",
-        position = 5,
+        position = 50,
         section = customSection
     )
     @Range(min = 10, max = 100)
@@ -202,7 +202,7 @@ public interface DvdBounceConfig extends Config
         keyName = "customSpeed",
         name = "Speed",
         description = "Per axis, from Ultra slow (15 px/s) to Ultra fast (600 px/s).",
-        position = 6,
+        position = 60,
         section = customSection
     )
     default BounceSpeed customSpeed()
@@ -214,7 +214,7 @@ public interface DvdBounceConfig extends Config
         keyName = "customColourShift",
         name = "Colour shift on bounce",
         description = "",
-        position = 7,
+        position = 70,
         section = customSection
     )
     default boolean customColourShift()
