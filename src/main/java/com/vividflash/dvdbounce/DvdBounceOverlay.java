@@ -33,17 +33,16 @@ import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
-import java.util.function.IntSupplier;
-import java.util.function.Supplier;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
 
 @Singleton
+@Slf4j
 public class DvdBounceOverlay extends Overlay
 {
     /**
@@ -135,17 +134,20 @@ public class DvdBounceOverlay extends Overlay
     private long resumeAtMs = Long.MAX_VALUE;
     private long pausedClockMs;
 
+    /**
+     * Time spent paused, taken off the animation clock so an animated picture
+     * resumes on the frame it froze on rather than skipping the pause.
+     */
+    private long pausedTotalMs;
+
     @Inject
     DvdBounceOverlay(Client client, DvdBouncePlugin plugin, DvdBounceConfig config)
     {
         this.client = client;
         this.plugin = plugin;
         this.config = config;
-        this.itemPicture = new Picture(0.31, 0.73, 1, 1,
-            config::itemSize, config::itemOpacity, config::itemSpeed, config::itemColourShift);
-        this.customPicture = new Picture(0.68, 0.24, -1, 1,
-            config::customSize, config::customOpacity, config::customSpeed,
-            config::customColourShift);
+        this.itemPicture = new Picture(0.31, 0.73, 1, 1);
+        this.customPicture = new Picture(0.68, 0.24, -1, 1);
         setLayer(OverlayLayer.ALWAYS_ON_TOP);
         setPosition(OverlayPosition.DYNAMIC);
         setPriority(Overlay.PRIORITY_HIGH);
@@ -161,6 +163,23 @@ public class DvdBounceOverlay extends Overlay
     @Override
     public Dimension render(Graphics2D graphics)
     {
+        // Each setting is read once per frame, here, and handed on as a value.
+        boolean itemEnabled = config.itemEnabled();
+        boolean customEnabled = config.customEnabled();
+        // A picture with nothing to draw yet, an item sprite still loading or a
+        // custom image still being read, reads none of its settings.
+        AnimatedImage itemImage = itemEnabled ? plugin.resolveItemImage() : null;
+        AnimatedImage customImage = customEnabled ? plugin.resolveCustomImage() : null;
+        if (itemImage == null && customImage == null)
+        {
+            // Nothing to draw: report no bounds rather than claiming the
+            // whole client, and do no clock work at all. Dropping the frame
+            // timer means the first frame after one is switched back on has no
+            // accrued time, so it carries on from where it stopped.
+            hasLastFrame = false;
+            return null;
+        }
+
         // Overlays draw onto the client's own raster, which is the pre-stretch
         // surface in stretched mode. Its size is the client canvas size, not
         // the AWT component size.
@@ -171,41 +190,35 @@ public class DvdBounceOverlay extends Overlay
             return null;
         }
 
-        if (!config.itemEnabled() && !config.customEnabled())
-        {
-            // Nothing switched on: report no bounds rather than claiming the
-            // whole client, and do no clock work at all. Dropping the frame
-            // timer means the first frame after one is switched back on has no
-            // accrued time, so it carries on from where it stopped.
-            hasLastFrame = false;
-            return null;
-        }
-
         long nowMs = monotonicMs();
         if (paused && nowMs >= resumeAtMs)
         {
             paused = false;
+            log.debug("[state] resumed after grace period");
             // No time accrued across the pause: motion resumes from the
             // frozen spot instead of jumping ahead.
             hasLastFrame = false;
+            pausedTotalMs = nowMs - pausedClockMs;
         }
 
         // One clock reading for both pictures, so they never drift apart by a
         // frame, and one draw-mode decision from it.
         double dt = stepSeconds(frameSeconds());
         updateDrawMode();
-        long clockMs = paused ? pausedClockMs : nowMs;
-        boolean drawSubPixel = useSubPixel();
+        long clockMs = paused ? pausedClockMs : nowMs - pausedTotalMs;
+        boolean drawSubPixel = useSubPixel(config.fpsMode());
 
-        if (config.itemEnabled())
+        if (itemImage != null)
         {
-            itemPicture.render(graphics, plugin.resolveItemImage(), clockMs, nowMs, dt,
-                drawSubPixel, canvasWidth, canvasHeight);
+            itemPicture.render(graphics, itemImage, config.itemSize(),
+                config.itemOpacity(), config.itemSpeed(), config.itemColourShift(), clockMs, nowMs,
+                dt, drawSubPixel, canvasWidth, canvasHeight);
         }
-        if (config.customEnabled())
+        if (customImage != null)
         {
-            customPicture.render(graphics, plugin.resolveCustomImage(), clockMs, nowMs, dt,
-                drawSubPixel, canvasWidth, canvasHeight);
+            customPicture.render(graphics, customImage, config.customSize(),
+                config.customOpacity(), config.customSpeed(), config.customColourShift(), clockMs,
+                nowMs, dt, drawSubPixel, canvasWidth, canvasHeight);
         }
 
         if (bounds == null || bounds.width != canvasWidth || bounds.height != canvasHeight)
@@ -240,6 +253,7 @@ public class DvdBounceOverlay extends Overlay
     {
         paused = false;
         resumeAtMs = Long.MAX_VALUE;
+        pausedTotalMs = 0;
         hasLastFrame = false;
         avgFrameSeconds = 0;
         subPixel = false;
@@ -270,9 +284,9 @@ public class DvdBounceOverlay extends Overlay
      * The draw mode for this frame: the FPS mode config forces crisp or
      * smooth outright; Adaptive follows the measured frame rate.
      */
-    private boolean useSubPixel()
+    private boolean useSubPixel(FpsMode fpsMode)
     {
-        switch (config.fpsMode())
+        switch (fpsMode)
         {
             case CRISP:
                 return false;
@@ -334,6 +348,7 @@ public class DvdBounceOverlay extends Overlay
         if (subPixel ? fps < 63 : fps > 68)
         {
             subPixel = fps > 68;
+            log.debug("[render] draw mode subPixel={} at {} fps", subPixel, Math.round(fps));
         }
     }
 
@@ -346,7 +361,8 @@ public class DvdBounceOverlay extends Overlay
         if (!paused)
         {
             paused = true;
-            pausedClockMs = monotonicMs();
+            log.debug("[state] paused");
+            pausedClockMs = monotonicMs() - pausedTotalMs;
         }
         resumeAtMs = Long.MAX_VALUE;
     }
@@ -360,6 +376,7 @@ public class DvdBounceOverlay extends Overlay
         if (paused && resumeAtMs == Long.MAX_VALUE)
         {
             resumeAtMs = monotonicMs() + RESUME_GRACE_MS;
+            log.debug("[state] resume armed in {} ms", RESUME_GRACE_MS);
         }
     }
 
@@ -424,17 +441,13 @@ public class DvdBounceOverlay extends Overlay
     /**
      * One bouncing picture: where it is, which way it is going, how far its
      * hue has turned, and the frames it has prepared at the current draw size.
-     * The settings it reads come in as suppliers, so the same class serves the
-     * item and the custom image without knowing which it is drawing.
+     * Its settings come in with each frame, so the same class serves the item
+     * and the custom image without knowing which it is drawing.
      */
     private static final class Picture
     {
         private final double startFractionX;
         private final double startFractionY;
-        private final IntSupplier size;
-        private final IntSupplier opacity;
-        private final Supplier<BounceSpeed> speed;
-        private final BooleanSupplier colourShift;
 
         private double x;
         private double y;
@@ -476,35 +489,33 @@ public class DvdBounceOverlay extends Overlay
         private long tintedAtMs;
 
         private Picture(double startFractionX, double startFractionY, int directionX,
-            int directionY, IntSupplier size, IntSupplier opacity, Supplier<BounceSpeed> speed,
-            BooleanSupplier colourShift)
+            int directionY)
         {
             this.startFractionX = startFractionX;
             this.startFractionY = startFractionY;
             this.directionX = directionX;
             this.directionY = directionY;
-            this.size = size;
-            this.opacity = opacity;
-            this.speed = speed;
-            this.colourShift = colourShift;
         }
 
-        private void render(Graphics2D graphics, AnimatedImage source, long clockMs, long nowMs,
-            double dt, boolean drawSubPixel, int canvasWidth, int canvasHeight)
+        private void render(Graphics2D graphics, AnimatedImage source, int size, int opacity,
+            BounceSpeed speed, boolean colourShift, long clockMs, long nowMs, double dt,
+            boolean drawSubPixel, int canvasWidth, int canvasHeight)
         {
-            if (source == null)
-            {
-                return;
-            }
-
             // The config range keeps this sane, but a hand-edited profile can
             // hold anything, and a zero or negative draw size would throw from
             // here on.
-            int requestedWidth = Math.max(MIN_DRAW_SIZE, size.getAsInt());
+            int requestedWidth = Math.max(MIN_DRAW_SIZE, size);
             int drawWidth = Math.min(requestedWidth, canvasWidth);
             int drawHeight = Math.max(MIN_DRAW_SIZE,
                 (int) Math.round((double) drawWidth * source.getHeight() / source.getWidth()));
-            drawHeight = Math.min(drawHeight, canvasHeight);
+            if (drawHeight > canvasHeight)
+            {
+                // A picture taller than the canvas shrinks on both axes, so it
+                // keeps its shape instead of being squashed to fit.
+                drawHeight = canvasHeight;
+                drawWidth = Math.max(MIN_DRAW_SIZE,
+                    (int) Math.round((double) drawHeight * source.getWidth() / source.getHeight()));
+            }
 
             // What travels is the visible part of the picture, not its box. An
             // item sprite is padded out to 36x32, and bouncing the box would
@@ -520,14 +531,14 @@ public class DvdBounceOverlay extends Overlay
             int inkHeight = Math.max(MIN_DRAW_SIZE,
                 (int) Math.round(source.getInkHeight() * scaleY));
 
-            advancePosition(canvasWidth - inkWidth, canvasHeight - inkHeight, dt);
+            advancePosition(canvasWidth - inkWidth, canvasHeight - inkHeight, speed, dt);
 
             // Animated sources loop on the monotonic clock; static ones always
             // return their single frame. While paused the clock freezes too.
             BufferedImage frame = source.frameAt(clockMs);
-            int alpha = Math.max(0, Math.min(FULL_OPACITY, opacity.getAsInt()));
+            int alpha = Math.max(0, Math.min(FULL_OPACITY, opacity));
             BufferedImage image;
-            if (!colourShift.getAsBoolean())
+            if (!colourShift)
             {
                 image = scaledFor(source, frame, drawWidth, drawHeight, alpha);
             }
@@ -576,7 +587,8 @@ public class DvdBounceOverlay extends Overlay
          * client freeze or a laptop resume, puts the picture where it would be
          * had it kept moving the whole time, bounces included.
          */
-        private void advancePosition(int travelWidth, int travelHeight, double dt)
+        private void advancePosition(int travelWidth, int travelHeight, BounceSpeed speed,
+            double dt)
         {
             travelWidth = Math.max(0, travelWidth);
             travelHeight = Math.max(0, travelHeight);
@@ -591,7 +603,7 @@ public class DvdBounceOverlay extends Overlay
                 positionInitialized = true;
             }
 
-            double step = speed.get().getPixelsPerSecond() * dt;
+            double step = speed.getPixelsPerSecond() * dt;
 
             double[] state = foldState;
             state[0] = x;

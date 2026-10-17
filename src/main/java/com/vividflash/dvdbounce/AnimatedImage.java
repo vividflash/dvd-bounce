@@ -205,8 +205,9 @@ final class AnimatedImage
      * Load an image file, decoding all frames if it is an animated GIF. Frames
      * are downscaled to {@code maxDimension} on their longest side; pass 0 to
      * leave the size untouched. Returns null when no ImageIO reader recognises
-     * the file, and throws {@link TooLargeException} when the source holds more
-     * than {@link #MAX_DECODE_PIXELS} pixels. A GIF whose declared canvas is
+     * the file, and throws {@link TooLargeException} when the source, or any
+     * frame of a GIF, holds more than {@link #MAX_DECODE_PIXELS} pixels. A GIF
+     * whose declared canvas is
      * too large loads as its first frame only.
      */
     static AnimatedImage load(Filepath file, int maxDimension) throws IOException
@@ -325,6 +326,14 @@ final class AnimatedImage
 
         for (int i = 0; i < frameCount; i++)
         {
+            // load() checks only the first frame. A later one declaring a huge
+            // size would otherwise be decoded in full before anything noticed.
+            int frameWidth = reader.getWidth(i);
+            int frameHeight = reader.getHeight(i);
+            if ((long) frameWidth * frameHeight > MAX_DECODE_PIXELS)
+            {
+                throw new TooLargeException(frameWidth, frameHeight);
+            }
             BufferedImage frame = reader.read(i);
             IIOMetadata frameMetadata = reader.getImageMetadata(i);
             Node tree = frameMetadata == null

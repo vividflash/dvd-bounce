@@ -217,6 +217,13 @@ public class DvdBouncePlugin extends Plugin
         {
             log.warn("Could not create plugin folder", e);
         }
+        log.debug("[state] startUp");
+        log.debug("[config] itemEnabled={} itemId={} itemSize={} itemOpacity={} itemSpeed={} itemColourShift={} "
+                + "customEnabled={} customImageFile={} customSize={} customOpacity={} customSpeed={} "
+                + "customColourShift={} fpsMode={}",
+            config.itemEnabled(), config.itemId(), config.itemSize(), config.itemOpacity(), config.itemSpeed(),
+            config.itemColourShift(), config.customEnabled(), config.customImageFile(), config.customSize(),
+            config.customOpacity(), config.customSpeed(), config.customColourShift(), config.fpsMode());
         migrateOnce();
         reloadItemImage();
         reloadCustomImage(false);
@@ -235,6 +242,7 @@ public class DvdBouncePlugin extends Plugin
     @Override
     protected void shutDown()
     {
+        log.debug("[state] shutDown");
         // Release all decoded frames so a disabled plugin pins no heap; the
         // generation bumps also invalidate any load still in flight, and any
         // failure it was about to announce.
@@ -279,9 +287,11 @@ public class DvdBouncePlugin extends Plugin
             case LOGGING_IN:
             case LOGIN_SCREEN:
             case CONNECTION_LOST:
+                log.debug("[state] game state {}, pausing bounce", event.getGameState());
                 overlay.pause();
                 break;
             case LOGGED_IN:
+                log.debug("[state] logged in, scheduling resume");
                 overlay.scheduleResume();
                 maybeAnnounceUpdate();
                 announceImageFailure();
@@ -298,6 +308,7 @@ public class DvdBouncePlugin extends Plugin
         {
             return;
         }
+        log.debug("[config] changed key={} new={}", event.getKey(), event.getNewValue());
         if (CUSTOM_IMAGE_KEY.equals(event.getKey()) || CUSTOM_ENABLED_KEY.equals(event.getKey())
             || RELOAD_IMAGE_KEY.equals(event.getKey()))
         {
@@ -327,8 +338,10 @@ public class DvdBouncePlugin extends Plugin
         String lastSeen = configManager.getConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY);
         configManager.setConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY, VERSION);
 
+        log.debug("[update] lastSeen={} current={}", lastSeen, VERSION);
         if (lastSeen != null && !lastSeen.isEmpty() && !VERSION.equals(lastSeen))
         {
+            log.debug("[update] announcing update notice");
             announce(UPDATE_MESSAGE);
         }
     }
@@ -360,6 +373,7 @@ public class DvdBouncePlugin extends Plugin
         {
             return;
         }
+        log.debug("[migrate] sweeping, previously swept={} now={}", swept, MIGRATION_VERSION);
         configManager.setConfiguration(CONFIG_GROUP, MIGRATION_KEY, MIGRATION_VERSION);
 
         // Only a profile last swept before 1.6 takes the steps in here. One
@@ -370,6 +384,7 @@ public class DvdBouncePlugin extends Plugin
             // had one set of them, applied to whatever it was bouncing, so both
             // pictures inherit those values and whichever gets switched on looks
             // the way it used to. Read before the dead keys below are cleared.
+            log.debug("[migrate] carrying retired size, speed and colour shift settings forward");
             carryForward("imageSize", "itemSize", "customSize");
             carryForward("bounceSpeed", "itemSpeed", "customSpeed");
             carryForward("colourShift", "itemColourShift", "customColourShift");
@@ -379,6 +394,7 @@ public class DvdBouncePlugin extends Plugin
             String configuredFile = configManager.getConfiguration(CONFIG_GROUP, CUSTOM_IMAGE_KEY);
             if (configuredFile != null && !configuredFile.trim().isEmpty())
             {
+                log.debug("[migrate] file name {} was set, switching to the custom picture", configuredFile);
                 configManager.setConfiguration(CONFIG_GROUP, CUSTOM_ENABLED_KEY, true);
                 configManager.setConfiguration(CONFIG_GROUP, ITEM_ENABLED_KEY, false);
             }
@@ -475,6 +491,7 @@ public class DvdBouncePlugin extends Plugin
                 {
                     if (gen == itemLoadGen.get())
                     {
+                        log.debug("[item] sprite published for id {}", configured);
                         itemImage = AnimatedImage.of(sprite);
                     }
                 }
@@ -583,6 +600,8 @@ public class DvdBouncePlugin extends Plugin
                 {
                     return;
                 }
+                log.debug("[image] custom name={} wanted={} loaded={} notice={} tooLarge={}", name, wanted,
+                    loaded != null, notice != null, tooLarge);
                 customImage = loaded;
                 customNotice = notice;
                 if (loaded != null || name.isEmpty())
@@ -611,7 +630,9 @@ public class DvdBouncePlugin extends Plugin
             }
             if (announce)
             {
-                announceImageFailure();
+                // The game state read and the chat message belong on the
+                // client thread, not this loader.
+                clientThread.invoke(this::announceImageFailure);
             }
         });
     }
@@ -650,6 +671,7 @@ public class DvdBouncePlugin extends Plugin
         {
             shown = shown.substring(0, NAME_NOTICE_LIMIT) + "...";
         }
+        log.debug("[notice] announcing image failure name={} tooLarge={}", failure.name, failure.tooLarge);
         if (failure.tooLarge)
         {
             announce("DVD Bounce could not use \"" + shown + "\": images are limited to"

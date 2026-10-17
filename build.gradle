@@ -3,12 +3,12 @@ plugins {
 }
 
 group = 'com.vividflash'
-version = '1.7.3'
+version = '1.7.4'
 
 // Pinned rather than 'latest.release' so local builds resolve the same client
 // every time. Only affects development: build=standard means the Plugin Hub
 // replaces this file and builds against its own runelite.version.
-def runeLiteVersion = '1.13.1'
+def runeLiteVersion = '1.13.2'
 
 repositories {
     mavenLocal()
@@ -22,6 +22,9 @@ dependencies {
     compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
     compileOnly group: 'org.projectlombok', name: 'lombok', version: '1.18.30'
     annotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.30'
+
+    testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+    testImplementation group: 'junit', name: 'junit', version: '4.13.2'
 }
 
 tasks.withType(JavaCompile) {
@@ -29,3 +32,9 @@ tasks.withType(JavaCompile) {
     options.release = 11
     options.compilerArgs << '-Xlint:deprecation'
 }
+
+test {
+    useJUnit()
+}
+
+if (file('dev.gradle').exists()) { apply from: 'dev.gradle' }
