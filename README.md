@@ -16,7 +16,7 @@ either or both can be on.
 
 **Item**
 
-- **Bounce an item**: Default `on`.
+- **Bounce an item**: Default `off`.
 - **Colour shift on bounce**: the colours rotate a step on every bounce. A
   corner hits two edges, so it shifts two steps. Default `on`.
 - **Item ID**: the item whose sprite bounces. An ID with no item falls back

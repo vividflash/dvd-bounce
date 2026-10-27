@@ -69,7 +69,7 @@ public interface DvdBounceConfig extends Config
     )
     default boolean itemEnabled()
     {
-        return true;
+        return false;
     }
 
     @ConfigItem(

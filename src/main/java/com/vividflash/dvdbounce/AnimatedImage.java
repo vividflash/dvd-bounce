@@ -313,8 +313,11 @@ final class AnimatedImage
         }
         if ((long) canvasWidth * canvasHeight > MAX_GIF_CANVAS_PIXELS)
         {
-            log.debug("GIF declares a {}x{} canvas, above the {} pixel cap; using one frame",
-                canvasWidth, canvasHeight, MAX_GIF_CANVAS_PIXELS);
+            if (log.isDebugEnabled())
+            {
+                log.debug("GIF declares a {}x{} canvas, above the {} pixel cap; using one frame",
+                    canvasWidth, canvasHeight, MAX_GIF_CANVAS_PIXELS);
+            }
             return null;
         }
 

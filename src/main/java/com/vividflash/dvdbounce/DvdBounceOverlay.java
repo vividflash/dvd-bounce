@@ -163,6 +163,15 @@ public class DvdBounceOverlay extends Overlay
     @Override
     public Dimension render(Graphics2D graphics)
     {
+        // Both pictures switched off: one field read and out, no config read.
+        // Dropping the frame timer means the first frame after one is switched
+        // back on has no accrued time, so it carries on from where it stopped.
+        if (!plugin.isAnyPictureEnabled())
+        {
+            hasLastFrame = false;
+            return null;
+        }
+
         // Each setting is read once per frame, here, and handed on as a value.
         boolean itemEnabled = config.itemEnabled();
         boolean customEnabled = config.customEnabled();
@@ -348,7 +357,10 @@ public class DvdBounceOverlay extends Overlay
         if (subPixel ? fps < 63 : fps > 68)
         {
             subPixel = fps > 68;
-            log.debug("[render] draw mode subPixel={} at {} fps", subPixel, Math.round(fps));
+            if (log.isDebugEnabled())
+            {
+                log.debug("[render] draw mode subPixel={} at {} fps", subPixel, Math.round(fps));
+            }
         }
     }
 
@@ -376,7 +388,10 @@ public class DvdBounceOverlay extends Overlay
         if (paused && resumeAtMs == Long.MAX_VALUE)
         {
             resumeAtMs = monotonicMs() + RESUME_GRACE_MS;
-            log.debug("[state] resume armed in {} ms", RESUME_GRACE_MS);
+            if (log.isDebugEnabled())
+            {
+                log.debug("[state] resume armed in {} ms", RESUME_GRACE_MS);
+            }
         }
     }
 

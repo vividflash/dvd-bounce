@@ -55,7 +55,7 @@ import net.runelite.client.util.ImageUtil;
 @Slf4j
 @PluginDescriptor(
     name = "DVD Bounce",
-    description = "DVD Logo bouncing of any item or your own image",
+    description = "DVD Logo Bouncing of Any Item or Your Own Image",
     tags = {"dvd", "bounce", "screensaver", "overlay", "item", "fun"},
     internalName = "dvd-bounce",
     legacyDataDirectory = "dvd-bounce"
@@ -115,10 +115,12 @@ public class DvdBouncePlugin extends Plugin
     private static final String[] DEAD_KEYS = {"speed", "cornerFlash", LEGACY_MIGRATION_KEY,
         "imageSize", "bounceSpeed", "colourShift", "gifNoticeShown"};
 
-    /** The release the one-time notice below belongs to, not the packaged version. */
+    /**
+     * The release last recorded in a profile, not the packaged version. No
+     * release currently carries a chat notice; the recorded version lets a
+     * later one tell an update from a fresh install.
+     */
     private static final String VERSION = "1.7";
-    private static final String UPDATE_MESSAGE =
-        "DVD Bounce v1.7: RuneLite now requires files to use .runelite/plugin-data/dvd-bounce instead, we have moved your files there from .runelite/dvd-bounce.";
 
     /** Dark red, for legibility against the opaque chatbox background. */
     private static final Color NOTICE_COLOR = new Color(0x480000);
@@ -188,6 +190,13 @@ public class DvdBouncePlugin extends Plugin
     private volatile AnimatedImage customNotice;
 
     /**
+     * Whether either picture is switched on, kept here from startUp and the
+     * two toggles' config changes so the overlay's first test each frame is
+     * this field and not a config read.
+     */
+    private volatile boolean anyPictureEnabled;
+
+    /**
      * Load generations: each (re)load bumps its counter and only the newest
      * load may publish its result, so a slow decode or a late sprite cannot
      * overwrite a newer config edit, and results arriving after shutDown are
@@ -218,13 +227,17 @@ public class DvdBouncePlugin extends Plugin
             log.warn("Could not create plugin folder", e);
         }
         log.debug("[state] startUp");
-        log.debug("[config] itemEnabled={} itemId={} itemSize={} itemOpacity={} itemSpeed={} itemColourShift={} "
-                + "customEnabled={} customImageFile={} customSize={} customOpacity={} customSpeed={} "
-                + "customColourShift={} fpsMode={}",
-            config.itemEnabled(), config.itemId(), config.itemSize(), config.itemOpacity(), config.itemSpeed(),
-            config.itemColourShift(), config.customEnabled(), config.customImageFile(), config.customSize(),
-            config.customOpacity(), config.customSpeed(), config.customColourShift(), config.fpsMode());
+        if (log.isDebugEnabled())
+        {
+            log.debug("[config] itemEnabled={} itemId={} itemSize={} itemOpacity={} itemSpeed={} itemColourShift={} "
+                    + "customEnabled={} customImageFile={} customSize={} customOpacity={} customSpeed={} "
+                    + "customColourShift={} fpsMode={}",
+                config.itemEnabled(), config.itemId(), config.itemSize(), config.itemOpacity(), config.itemSpeed(),
+                config.itemColourShift(), config.customEnabled(), config.customImageFile(), config.customSize(),
+                config.customOpacity(), config.customSpeed(), config.customColourShift(), config.fpsMode());
+        }
         migrateOnce();
+        updateAnyPictureEnabled();
         reloadItemImage();
         reloadCustomImage(false);
         // startUp and shutDown run on the Swing thread, while the overlay's
@@ -308,7 +321,14 @@ public class DvdBouncePlugin extends Plugin
         {
             return;
         }
-        log.debug("[config] changed key={} new={}", event.getKey(), event.getNewValue());
+        if (log.isDebugEnabled())
+        {
+            log.debug("[config] changed key={} new={}", event.getKey(), event.getNewValue());
+        }
+        if (ITEM_ENABLED_KEY.equals(event.getKey()) || CUSTOM_ENABLED_KEY.equals(event.getKey()))
+        {
+            updateAnyPictureEnabled();
+        }
         if (CUSTOM_IMAGE_KEY.equals(event.getKey()) || CUSTOM_ENABLED_KEY.equals(event.getKey())
             || RELOAD_IMAGE_KEY.equals(event.getKey()))
         {
@@ -316,16 +336,18 @@ public class DvdBouncePlugin extends Plugin
             // sign if it is unusable; switching it off drops both again.
             reloadCustomImage(RELOAD_IMAGE_KEY.equals(event.getKey()));
         }
-        else if (ITEM_ID_KEY.equals(event.getKey()))
+        else if (ITEM_ID_KEY.equals(event.getKey()) || ITEM_ENABLED_KEY.equals(event.getKey()))
         {
+            // Switching the item on requests its sprite; switching it off
+            // drops the sprite again.
             reloadItemImage();
         }
     }
 
     /**
-     * One-time post-update notice on first login. A profile with no recorded
-     * version is a fresh install and is told nothing; afterward it is a version
-     * comparison.
+     * Records {@link #VERSION} in the profile on first login. A notice for a
+     * later release compares against it; a profile with no recorded version
+     * is a fresh install and is told nothing.
      */
     private void maybeAnnounceUpdate()
     {
@@ -338,11 +360,9 @@ public class DvdBouncePlugin extends Plugin
         String lastSeen = configManager.getConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY);
         configManager.setConfiguration(CONFIG_GROUP, LAST_SEEN_VERSION_KEY, VERSION);
 
-        log.debug("[update] lastSeen={} current={}", lastSeen, VERSION);
-        if (lastSeen != null && !lastSeen.isEmpty() && !VERSION.equals(lastSeen))
+        if (log.isDebugEnabled())
         {
-            log.debug("[update] announcing update notice");
-            announce(UPDATE_MESSAGE);
+            log.debug("[update] lastSeen={} current={}", lastSeen, VERSION);
         }
     }
 
@@ -373,7 +393,10 @@ public class DvdBouncePlugin extends Plugin
         {
             return;
         }
-        log.debug("[migrate] sweeping, previously swept={} now={}", swept, MIGRATION_VERSION);
+        if (log.isDebugEnabled())
+        {
+            log.debug("[migrate] sweeping, previously swept={} now={}", swept, MIGRATION_VERSION);
+        }
         configManager.setConfiguration(CONFIG_GROUP, MIGRATION_KEY, MIGRATION_VERSION);
 
         // Only a profile last swept before 1.6 takes the steps in here. One
@@ -394,7 +417,10 @@ public class DvdBouncePlugin extends Plugin
             String configuredFile = configManager.getConfiguration(CONFIG_GROUP, CUSTOM_IMAGE_KEY);
             if (configuredFile != null && !configuredFile.trim().isEmpty())
             {
-                log.debug("[migrate] file name {} was set, switching to the custom picture", configuredFile);
+                if (log.isDebugEnabled())
+                {
+                    log.debug("[migrate] file name {} was set, switching to the custom picture", configuredFile);
+                }
                 configManager.setConfiguration(CONFIG_GROUP, CUSTOM_ENABLED_KEY, true);
                 configManager.setConfiguration(CONFIG_GROUP, ITEM_ENABLED_KEY, false);
             }
@@ -418,6 +444,21 @@ public class DvdBouncePlugin extends Plugin
         {
             configManager.setConfiguration(CONFIG_GROUP, newKey, value);
         }
+    }
+
+    private void updateAnyPictureEnabled()
+    {
+        anyPictureEnabled = config.itemEnabled() || config.customEnabled();
+        if (log.isDebugEnabled())
+        {
+            log.debug("[config] anyPictureEnabled={}", anyPictureEnabled);
+        }
+    }
+
+    /** Whether either picture is switched on; read by the overlay every frame. */
+    boolean isAnyPictureEnabled()
+    {
+        return anyPictureEnabled;
     }
 
     /**
@@ -461,6 +502,15 @@ public class DvdBouncePlugin extends Plugin
             itemImage = null;
         }
 
+        // Nothing is requested, drawn or held while the item is switched off.
+        // The bump and clear above still run, so switching it off drops the
+        // sprite and any load still in flight.
+        if (!config.itemEnabled())
+        {
+            log.debug("[item] item switched off, no sprite requested");
+            return;
+        }
+
         int configured = config.itemId();
         clientThread.invoke(() ->
         {
@@ -479,7 +529,10 @@ public class DvdBouncePlugin extends Plugin
             AsyncBufferedImage sprite = itemManager.getImage(usableItemId(configured));
             if (sprite == null)
             {
-                log.debug("No item sprite available for id {}", configured);
+                if (log.isDebugEnabled())
+                {
+                    log.debug("No item sprite available for id {}", configured);
+                }
                 return true;
             }
             // Registered outside the publish lock. The callback takes that
@@ -491,7 +544,10 @@ public class DvdBouncePlugin extends Plugin
                 {
                     if (gen == itemLoadGen.get())
                     {
-                        log.debug("[item] sprite published for id {}", configured);
+                        if (log.isDebugEnabled())
+                        {
+                            log.debug("[item] sprite published for id {}", configured);
+                        }
                         itemImage = AnimatedImage.of(sprite);
                     }
                 }
@@ -516,7 +572,10 @@ public class DvdBouncePlugin extends Plugin
         String name = composition == null ? null : composition.getName();
         if (name == null || name.isEmpty() || "null".equalsIgnoreCase(name))
         {
-            log.debug("Item {} is unused in the cache, drawing the default item", configured);
+            if (log.isDebugEnabled())
+            {
+                log.debug("Item {} is unused in the cache, drawing the default item", configured);
+            }
             return DEFAULT_ITEM_ID;
         }
         return configured;
@@ -600,8 +659,11 @@ public class DvdBouncePlugin extends Plugin
                 {
                     return;
                 }
-                log.debug("[image] custom name={} wanted={} loaded={} notice={} tooLarge={}", name, wanted,
-                    loaded != null, notice != null, tooLarge);
+                if (log.isDebugEnabled())
+                {
+                    log.debug("[image] custom name={} wanted={} loaded={} notice={} tooLarge={}", name, wanted,
+                        loaded != null, notice != null, tooLarge);
+                }
                 customImage = loaded;
                 customNotice = notice;
                 if (loaded != null || name.isEmpty())
@@ -671,7 +733,10 @@ public class DvdBouncePlugin extends Plugin
         {
             shown = shown.substring(0, NAME_NOTICE_LIMIT) + "...";
         }
-        log.debug("[notice] announcing image failure name={} tooLarge={}", failure.name, failure.tooLarge);
+        if (log.isDebugEnabled())
+        {
+            log.debug("[notice] announcing image failure name={} tooLarge={}", failure.name, failure.tooLarge);
+        }
         if (failure.tooLarge)
         {
             announce("DVD Bounce could not use \"" + shown + "\": images are limited to"
