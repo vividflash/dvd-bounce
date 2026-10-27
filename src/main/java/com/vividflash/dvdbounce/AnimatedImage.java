@@ -231,8 +231,8 @@ final class AnimatedImage
                     throw new TooLargeException(width, height);
                 }
 
-                // Asking for a second frame reads only as far as it, where
-                // counting every frame would scan the whole file.
+                // Checking for a second frame reads only that far; counting every frame would
+                // scan the whole file.
                 if ("gif".equalsIgnoreCase(reader.getFormatName()) && hasImage(reader, 1))
                 {
                     AnimatedImage animated = decodeGif(reader, maxDimension);
