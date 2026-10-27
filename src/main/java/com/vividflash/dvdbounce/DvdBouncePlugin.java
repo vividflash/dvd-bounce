@@ -189,11 +189,8 @@ public class DvdBouncePlugin extends Plugin
      */
     private volatile AnimatedImage customNotice;
 
-    /**
-     * Whether either picture is switched on, kept here from startUp and the
-     * two toggles' config changes so the overlay's first test each frame is
-     * this field and not a config read.
-     */
+    // Whether either picture is switched on, kept here from startUp and the two toggles' config
+    // changes so the overlay's first test each frame is this field and not a config read.
     private volatile boolean anyPictureEnabled;
 
     /**
@@ -300,7 +297,10 @@ public class DvdBouncePlugin extends Plugin
             case LOGGING_IN:
             case LOGIN_SCREEN:
             case CONNECTION_LOST:
-                log.debug("[state] game state {}, pausing bounce", event.getGameState());
+                if (log.isDebugEnabled())
+                {
+                    log.debug("[state] game state {}, pausing bounce", event.getGameState());
+                }
                 overlay.pause();
                 break;
             case LOGGED_IN:
@@ -328,6 +328,16 @@ public class DvdBouncePlugin extends Plugin
         if (ITEM_ENABLED_KEY.equals(event.getKey()) || CUSTOM_ENABLED_KEY.equals(event.getKey()))
         {
             updateAnyPictureEnabled();
+            // A picture switched off no longer renders, so nothing else would
+            // release its prepared frames before shutDown.
+            if (ITEM_ENABLED_KEY.equals(event.getKey()) && !config.itemEnabled())
+            {
+                clientThread.invoke(overlay::clearItemCaches);
+            }
+            else if (CUSTOM_ENABLED_KEY.equals(event.getKey()) && !config.customEnabled())
+            {
+                clientThread.invoke(overlay::clearCustomCaches);
+            }
         }
         if (CUSTOM_IMAGE_KEY.equals(event.getKey()) || CUSTOM_ENABLED_KEY.equals(event.getKey())
             || RELOAD_IMAGE_KEY.equals(event.getKey()))
@@ -455,7 +465,7 @@ public class DvdBouncePlugin extends Plugin
         }
     }
 
-    /** Whether either picture is switched on; read by the overlay every frame. */
+    // Whether either picture is switched on; read by the overlay every frame.
     boolean isAnyPictureEnabled()
     {
         return anyPictureEnabled;

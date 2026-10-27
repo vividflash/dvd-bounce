@@ -278,6 +278,18 @@ public class DvdBounceOverlay extends Overlay
         customPicture.clearCaches();
     }
 
+    // Drop one picture's frame caches once it is switched off. Switching it back on loads a new
+    // source, so they would never be used again. Called on the client thread, which owns them.
+    void clearItemCaches()
+    {
+        itemPicture.clearCaches();
+    }
+
+    void clearCustomCaches()
+    {
+        customPicture.clearCaches();
+    }
+
     /**
      * Milliseconds from the monotonic clock. Used for the animation clock and
      * pause/resume timers instead of the wall clock, which can jump around
@@ -445,6 +457,11 @@ public class DvdBounceOverlay extends Overlay
         {
             int argb = pixels[i];
             int alpha = argb & 0xFF000000;
+            if (alpha == 0)
+            {
+                // Invisible whatever its colour, so it keeps the one it has.
+                continue;
+            }
             Color.RGBtoHSB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, hsb);
             int rgb = Color.HSBtoRGB((hsb[0] + hueShift) % 1f, hsb[1], hsb[2]);
             pixels[i] = alpha | (rgb & 0x00FFFFFF);
