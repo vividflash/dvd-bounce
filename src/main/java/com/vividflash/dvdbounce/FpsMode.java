@@ -27,13 +27,10 @@ package com.vividflash.dvdbounce;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-/**
- * How the image position is rendered. Crisp snaps to whole pixels, which suits
- * the standard 60 fps, where the speed presets advance in whole pixels per
- * frame. Smooth draws at the exact fractional position with bilinear
- * filtering, judder-free at any frame rate at the cost of slightly softer
- * edges. Adaptive measures the real frame rate and picks automatically.
- */
+// How the image position is rendered. Crisp snaps to whole pixels, which suits the standard 60 fps,
+// where the speed presets advance in whole pixels per frame. Smooth draws at the exact fractional
+// position with bilinear filtering, judder-free at any frame rate at the cost of slightly softer
+// edges. Adaptive measures the real frame rate and picks automatically.
 @Getter
 @RequiredArgsConstructor
 public enum FpsMode

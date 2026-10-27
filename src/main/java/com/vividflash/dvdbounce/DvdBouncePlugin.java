@@ -62,17 +62,13 @@ import net.runelite.client.util.ImageUtil;
 )
 public class DvdBouncePlugin extends Plugin
 {
-    /**
-     * Custom images are downscaled to at most this many pixels on their longest
-     * side before use, so the per-bounce colour-shift pass stays cheap even when
-     * the user points the plugin at a full-size photo.
-     */
+    // Custom images are downscaled to at most this many pixels on their longest side before use, so
+    // the per-bounce colour-shift pass stays cheap even when the user points the plugin at a
+    // full-size photo.
     private static final int MAX_SOURCE_DIMENSION = 512;
 
-    /**
-     * The only folder this plugin reads from. Created on startup so users can
-     * drop their image into it. Null when it could not be set up.
-     */
+    // The only folder this plugin reads from. Created on startup so users can drop their image into
+    // it. Null when it could not be set up.
     private volatile Filepath pluginDir;
 
     private static final String CONFIG_GROUP = "dvdbounce";
@@ -81,51 +77,39 @@ public class DvdBouncePlugin extends Plugin
     private static final String ITEM_ENABLED_KEY = "itemEnabled";
     private static final String CUSTOM_ENABLED_KEY = "customEnabled";
 
-    /**
-     * Ticking this re-reads the file. It also gives the user somewhere to click
-     * after typing a file name, since the client only takes the text of a
-     * setting once the box loses focus.
-     */
+    // Ticking this re-reads the file. It also gives the user somewhere to click after typing a file
+    // name, since the client only takes the text of a setting once the box loses focus.
     private static final String RELOAD_IMAGE_KEY = "reloadImage";
     private static final String LAST_SEEN_VERSION_KEY = "lastSeenVersion";
 
-    /** Item drawn when the configured id is not one the client has an item for. */
+    // Item drawn when the configured id is not one the client has an item for.
     private static final int DEFAULT_ITEM_ID = ItemID.RUBBER_CHICKEN;
 
-    /**
-     * Records which release last swept {@link #DEAD_KEYS}. Version-stamped
-     * rather than a flag, so a later release can add keys and sweep again.
-     */
+    // Records which release last swept DEAD_KEYS. Version-stamped rather than a flag, so a later
+    // release can add keys and sweep again.
     private static final String MIGRATION_KEY = "migratedVersion";
     private static final String MIGRATION_VERSION = "1.7";
 
-    /**
-     * The boolean marker 1.4 used before {@link #MIGRATION_KEY}. A profile
-     * carrying it has had the 1.4 sweep and no later one, so it counts as
-     * swept at {@link #LEGACY_MIGRATION_VERSION} rather than at whatever
-     * version the sweep has since reached.
-     */
+    // The boolean marker 1.4 used before MIGRATION_KEY. A profile carrying it has had the 1.4 sweep
+    // and no later one, so it counts as swept at LEGACY_MIGRATION_VERSION rather than at whatever
+    // version the sweep has since reached.
     private static final String LEGACY_MIGRATION_KEY = "migratedV14";
     private static final String LEGACY_MIGRATION_VERSION = "1.4";
 
-    /**
-     * Config items removed by earlier versions; cleared from profiles by the
-     * sweep. Add to this and bump {@link #MIGRATION_VERSION} together.
-     */
+    // Config items removed by earlier versions; cleared from profiles by the sweep. Add to this and
+    // bump MIGRATION_VERSION together.
     private static final String[] DEAD_KEYS = {"speed", "cornerFlash", LEGACY_MIGRATION_KEY,
         "imageSize", "bounceSpeed", "colourShift", "gifNoticeShown"};
 
-    /**
-     * The release last recorded in a profile, not the packaged version. No
-     * release currently carries a chat notice; the recorded version lets a
-     * later one tell an update from a fresh install.
-     */
+    // The release last recorded in a profile, not the packaged version. No release currently
+    // carries a chat notice; the recorded version lets a later one tell an update from a fresh
+    // install.
     private static final String VERSION = "1.7";
 
-    /** Dark red, for legibility against the opaque chatbox background. */
+    // Dark red, for legibility against the opaque chatbox background.
     private static final Color NOTICE_COLOR = new Color(0x480000);
 
-    /** Longest custom image name repeated back in a chat notice. */
+    // Longest custom image name repeated back in a chat notice.
     private static final int NAME_NOTICE_LIMIT = 40;
 
     @Inject
@@ -155,59 +139,42 @@ public class DvdBouncePlugin extends Plugin
     @Inject
     private ClientThread clientThread;
 
-    /** One update check per session; reset on startUp. */
+    // One update check per session; reset on startUp.
     private boolean updateChecked;
 
-    /**
-     * A custom image that failed to load and still owes the user a chat notice,
-     * and the last name a notice was given for. Together they say it once per
-     * broken name, and only when there is a chat box to say it in. A successful
-     * load clears both, so a file that breaks again is reported again.
-     */
+    // A custom image that failed to load and still owes the user a chat notice, and the last name a
+    // notice was given for. Together they say it once per broken name, and only when there is a
+    // chat box to say it in. A successful load clears both, so a file that breaks again is reported
+    // again.
     private volatile ImageFailure pendingFailure;
     private volatile String announcedFailureName;
 
-    /**
-     * The configured item's sprite, published once the client has drawn it.
-     * Null until then, and while the configured item has no sprite at all, in
-     * which case nothing is drawn.
-     */
+    // The configured item's sprite, published once the client has drawn it. Null until then, and
+    // while the configured item has no sprite at all, in which case nothing is drawn.
     private volatile AnimatedImage itemImage;
 
-    /**
-     * The configured custom image, preloaded on the executor at startup and
-     * whenever its config key changes, so the overlay's render loop never
-     * touches the disk. Null when unset or unloadable, in which case
-     * {@link #customNotice} is drawn in its place.
-     */
+    // The configured custom image, preloaded on the executor at startup and whenever its config key
+    // changes, so the overlay's render loop never touches the disk. Null when unset or unloadable,
+    // in which case customNotice is drawn in its place.
     private volatile AnimatedImage customImage;
 
-    /**
-     * The sign shown in place of a custom image that is not set or cannot be
-     * read, so the picture on screen says what is wrong. Drawn only while the
-     * custom picture is switched on.
-     */
+    // The sign shown in place of a custom image that is not set or cannot be read, so the picture
+    // on screen says what is wrong. Drawn only while the custom picture is switched on.
     private volatile AnimatedImage customNotice;
 
     // Whether either picture is switched on, kept here from startUp and the two toggles' config
     // changes so the overlay's first test each frame is this field and not a config read.
     private volatile boolean anyPictureEnabled;
 
-    /**
-     * Load generations: each (re)load bumps its counter and only the newest
-     * load may publish its result, so a slow decode or a late sprite cannot
-     * overwrite a newer config edit, and results arriving after shutDown are
-     * dropped.
-     */
+    // Load generations: each (re)load bumps its counter and only the newest load may publish its
+    // result, so a slow decode or a late sprite cannot overwrite a newer config edit, and results
+    // arriving after shutDown are dropped.
     private final AtomicInteger imageLoadGen = new AtomicInteger();
     private final AtomicInteger itemLoadGen = new AtomicInteger();
 
-    /**
-     * Guards the compare-and-publish in {@link #reloadCustomImage(boolean)} and
-     * {@link #reloadItemImage()} against shutDown's invalidate-and-clear, so a
-     * load that read a generation just before shutDown cannot assign
-     * afterwards. Held only across field writes.
-     */
+    // Guards the compare-and-publish in reloadCustomImage(boolean) and reloadItemImage() against
+    // shutDown's invalidate-and-clear, so a load that read a generation just before shutDown cannot
+    // assign afterwards. Held only across field writes.
     private final Object imagePublishLock = new Object();
 
     @Override
@@ -282,12 +249,9 @@ public class DvdBouncePlugin extends Plugin
         return configManager.getConfig(DvdBounceConfig.class);
     }
 
-    /**
-     * Pause the bounce while the client is busy with a world hop (or login /
-     * reconnect) and resume shortly after, so the overlay adds no work while
-     * the game is already struggling. Ordinary region loads while running
-     * around stay untouched.
-     */
+    // Pause the bounce while the client is busy with a world hop (or login / reconnect) and resume
+    // shortly after, so the overlay adds no work while the game is already struggling. Ordinary
+    // region loads while running around stay untouched.
     @Subscribe
     public void onGameStateChanged(GameStateChanged event)
     {
@@ -354,11 +318,8 @@ public class DvdBouncePlugin extends Plugin
         }
     }
 
-    /**
-     * Records {@link #VERSION} in the profile on first login. A notice for a
-     * later release compares against it; a profile with no recorded version
-     * is a fresh install and is told nothing.
-     */
+    // Records VERSION in the profile on first login. A notice for a later release compares against
+    // it; a profile with no recorded version is a fresh install and is told nothing.
     private void maybeAnnounceUpdate()
     {
         if (updateChecked)
@@ -386,11 +347,8 @@ public class DvdBouncePlugin extends Plugin
             .build());
     }
 
-    /**
-     * Clear config keys retired by earlier versions so they stop lingering in
-     * profiles. Runs once per {@link #MIGRATION_VERSION}; the framework never
-     * re-creates a non-item key.
-     */
+    // Clear config keys retired by earlier versions so they stop lingering in profiles. Runs once
+    // per MIGRATION_VERSION; the framework never re-creates a non-item key.
     private void migrateOnce()
     {
         String swept = configManager.getConfiguration(CONFIG_GROUP, MIGRATION_KEY);
@@ -442,7 +400,7 @@ public class DvdBouncePlugin extends Plugin
         }
     }
 
-    /** Copy a retired key's value onto the keys that replaced it, if it is set. */
+    // Copy a retired key's value onto the keys that replaced it, if it is set.
     private void carryForward(String oldKey, String... newKeys)
     {
         String value = configManager.getConfiguration(CONFIG_GROUP, oldKey);
@@ -471,36 +429,28 @@ public class DvdBouncePlugin extends Plugin
         return anyPictureEnabled;
     }
 
-    /**
-     * The item picture. Called from the overlay every frame, and never does any
-     * I/O; the sprite arrives via {@link #reloadItemImage()}. Null until it
-     * does, which the overlay draws as nothing.
-     */
+    // The item picture. Called from the overlay every frame, and never does any I/O; the sprite
+    // arrives via reloadItemImage(). Null until it does, which the overlay draws as nothing.
     AnimatedImage resolveItemImage()
     {
         return itemImage;
     }
 
-    /**
-     * The custom picture: the loaded file, or the notice sign while the file is
-     * unset or unreadable. Null only until the first load finishes.
-     */
+    // The custom picture: the loaded file, or the notice sign while the file is unset or
+    // unreadable. Null only until the first load finishes.
     AnimatedImage resolveCustomImage()
     {
         AnimatedImage custom = customImage;
         return custom != null ? custom : customNotice;
     }
 
-    /**
-     * (Re)request the configured item's sprite from {@link ItemManager}, which
-     * hands back an image the client fills in on a later tick, once the item
-     * cache is up. Publishing happens in its loaded callback so the overlay
-     * never scales blank pixels, and each load publishes a new wrapper, which
-     * is what makes the overlay rebuild its scale and tint caches.
-     *
-     * <p>An id the client has no sprite for never loads, and nothing is drawn
-     * until the id is changed to one that does.
-     */
+    // (Re)request the configured item's sprite from ItemManager, which hands back an image the
+    // client fills in on a later tick, once the item cache is up. Publishing happens in its loaded
+    // callback so the overlay never scales blank pixels, and each load publishes a new wrapper,
+    // which is what makes the overlay rebuild its scale and tint caches.
+    //
+    // An id the client has no sprite for never loads, and nothing is drawn until the id is changed
+    // to one that does.
     private void reloadItemImage()
     {
         int gen = itemLoadGen.incrementAndGet();
@@ -566,12 +516,9 @@ public class DvdBouncePlugin extends Plugin
         });
     }
 
-    /**
-     * The configured id when the client has an item under it, and the default
-     * item otherwise. An id outside the cache, or one the cache has no item
-     * for, draws a placeholder sprite rather than nothing, so it is worth
-     * resolving before the image is requested. Runs on the client thread.
-     */
+    // The configured id when the client has an item under it, and the default item otherwise. An id
+    // outside the cache, or one the cache has no item for, draws a placeholder sprite rather than
+    // nothing, so it is worth resolving before the image is requested. Runs on the client thread.
     private int usableItemId(int configured)
     {
         if (configured < 0 || configured >= client.getItemCount())
@@ -591,11 +538,8 @@ public class DvdBouncePlugin extends Plugin
         return configured;
     }
 
-    /**
-     * (Re)load the configured custom image on the executor, publishing into
-     * {@link #customImage}. Runs off the client thread so neither rendering
-     * nor config edits ever wait on disk or GIF decoding.
-     */
+    // (Re)load the configured custom image on the executor, publishing into customImage. Runs off
+    // the client thread so neither rendering nor config edits ever wait on disk or GIF decoding.
     private void reloadCustomImage(boolean asked)
     {
         int gen = imageLoadGen.incrementAndGet();
@@ -709,12 +653,9 @@ public class DvdBouncePlugin extends Plugin
         });
     }
 
-    /**
-     * Tell the user their custom image could not be read, once the client is
-     * logged in and there is a chat box for it. A failure found before that
-     * waits for the login. Without this the notice on screen is the only sign
-     * of which file the plugin could not open.
-     */
+    // Tell the user their custom image could not be read, once the client is logged in and there is
+    // a chat box for it. A failure found before that waits for the login. Without this the notice
+    // on screen is the only sign of which file the plugin could not open.
     private void announceImageFailure()
     {
         if (client.getGameState() != GameState.LOGGED_IN)
@@ -758,13 +699,10 @@ public class DvdBouncePlugin extends Plugin
             + " Check the file name and that it ends in .png, .jpg, .gif or .bmp.");
     }
 
-    /**
-     * A custom image that could not be used, enough of why to say so, and the
-     * load generation it came from. A failure is only worth announcing while
-     * that generation is still the current one: a newer load has its own
-     * answer, and shutDown bumps the counter precisely so a stopped plugin
-     * says nothing.
-     */
+    // A custom image that could not be used, enough of why to say so, and the load generation it
+    // came from. A failure is only worth announcing while that generation is still the current one:
+    // a newer load has its own answer, and shutDown bumps the counter precisely so a stopped plugin
+    // says nothing.
     private static final class ImageFailure
     {
         private final String name;
@@ -779,11 +717,8 @@ public class DvdBouncePlugin extends Plugin
         }
     }
 
-    /**
-     * Resolve a configured file name inside the plugin's data folder.
-     * Only files within that folder are ever read; a name that escapes it
-     * (e.g. via "..") resolves to null.
-     */
+    // Resolve a configured file name inside the plugin's data folder. Only files within that folder
+    // are ever read; a name that escapes it (e.g. via "..") resolves to null.
     private Filepath resolvePluginFile(String name)
     {
         Filepath dir = pluginDir;

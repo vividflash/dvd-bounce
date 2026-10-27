@@ -44,59 +44,44 @@ import net.runelite.client.util.Filepath;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 
-/**
- * An image with one or more frames. Static formats (PNG, JPG, BMP and so on)
- * load as a single frame; animated GIFs are composited into full frames with
- * per-frame delays so a renderer can pick the frame for any elapsed time.
- * Decoding uses the JRE's ImageIO and nothing else.
- */
+// An image with one or more frames. Static formats (PNG, JPG, BMP and so on) load as a single
+// frame; animated GIFs are composited into full frames with per-frame delays so a renderer can pick
+// the frame for any elapsed time. Decoding uses the JRE's ImageIO and nothing else.
 @Slf4j
 final class AnimatedImage
 {
-    /**
-     * Caps on what a file may make this allocate. Decoded pixels are 4 bytes
-     * each, so the numbers below are what actually bounds the memory a chosen
-     * image can cost:
-     * <ul>
-     *   <li>{@link #MAX_DECODE_PIXELS} refuses a source larger than ImageIO
-     *   should be asked to expand, before any buffer is allocated;</li>
-     *   <li>{@link #MAX_GIF_CANVAS_PIXELS} bounds the compositing canvas, which
-     *   is sized from the GIF header rather than from any decoded frame, and
-     *   which a restoreToPrevious frame doubles;</li>
-     *   <li>{@link #MAX_FRAMES} bounds how many frames are kept, each already
-     *   downscaled by the caller's dimension cap;</li>
-     *   <li>{@link #MAX_TOTAL_BYTES} stops a GIF accumulating frames past a
-     *   total size, which matters most for a caller that asks for no
-     *   downscale, where a frame is otherwise bounded only by the canvas
-     *   cap.</li>
-     * </ul>
-     */
+    // Caps on what a file may make this allocate. Decoded pixels are 4 bytes each, so the numbers
+    // below are what actually bounds the memory a chosen image can cost:
+    //
+    // - MAX_DECODE_PIXELS refuses a source larger than ImageIO should be asked to expand, before
+    //   any buffer is allocated;
+    // - MAX_GIF_CANVAS_PIXELS bounds the compositing canvas, which is sized from the GIF header
+    //   rather than from any decoded frame, and which a restoreToPrevious frame doubles;
+    // - MAX_FRAMES bounds how many frames are kept, each already downscaled by the caller's
+    //   dimension cap;
+    // - MAX_TOTAL_BYTES stops a GIF accumulating frames past a total size, which matters most for a
+    //   caller that asks for no downscale, where a frame is otherwise bounded only by the canvas
+    //   cap.
     private static final int MAX_FRAMES = 30;
     private static final long MAX_TOTAL_BYTES = 32L * 1024 * 1024;
     private static final long MAX_DECODE_PIXELS = 4096L * 4096L;
     private static final long MAX_GIF_CANVAS_PIXELS = 2048L * 2048L;
 
-    /**
-     * A declared frame delay below this is not believed, and
-     * {@link #DEFAULT_DELAY_MS} is used instead. GIFs commonly declare 0, and
-     * browsers render those at about 100 ms per frame rather than spinning
-     * through them instantly.
-     */
+    // A declared frame delay below this is not believed, and DEFAULT_DELAY_MS is used instead. GIFs
+    // commonly declare 0, and browsers render those at about 100 ms per frame rather than spinning
+    // through them instantly.
     private static final int MIN_DECLARED_DELAY_MS = 20;
     private static final int DEFAULT_DELAY_MS = 100;
 
     private final BufferedImage[] frames;
-    /** Cumulative delay up to and including frame i, for elapsed-time lookup. */
+    // Cumulative delay up to and including frame i, for elapsed-time lookup.
     private final int[] frameEndTimesMs;
     private final int totalDurationMs;
 
-    /**
-     * The part of the image that is not fully transparent, in frame pixels,
-     * covering every frame. Item sprites sit in a 36x32 box with padding around
-     * them, so a renderer that bounces the whole box turns the picture around
-     * before the visible part reaches the edge. Measured once here rather than
-     * trimmed, so no pixel is lost.
-     */
+    // The part of the image that is not fully transparent, in frame pixels, covering every frame.
+    // Item sprites sit in a 36x32 box with padding around them, so a renderer that bounces the
+    // whole box turns the picture around before the visible part reaches the edge. Measured once
+    // here rather than trimmed, so no pixel is lost.
     private final Rectangle ink;
 
     private AnimatedImage(List<BufferedImage> frameList, List<Integer> delaysMs)
@@ -121,11 +106,8 @@ final class AnimatedImage
         ink = inkBounds(frames);
     }
 
-    /**
-     * The bounds of everything that is not fully transparent, across all
-     * frames. An image with nothing in it reports its full size, so a caller
-     * never has to handle an empty box.
-     */
+    // The bounds of everything that is not fully transparent, across all frames. An image with
+    // nothing in it reports its full size, so a caller never has to handle an empty box.
     private static Rectangle inkBounds(BufferedImage[] frames)
     {
         int minX = Integer.MAX_VALUE;
@@ -179,19 +161,14 @@ final class AnimatedImage
         return ink.height;
     }
 
-    /**
-     * Wrap an already-decoded static image as a single-frame animation.
-     */
+    // Wrap an already-decoded static image as a single-frame animation.
     static AnimatedImage of(BufferedImage image)
     {
         return image == null ? null : new AnimatedImage(image);
     }
 
-    /**
-     * A source with more pixels than {@link #MAX_DECODE_PIXELS}. Separate from
-     * the other failures so a caller can tell the user their file is too big,
-     * rather than blaming its name or format.
-     */
+    // A source with more pixels than MAX_DECODE_PIXELS. Separate from the other failures so a
+    // caller can tell the user their file is too big, rather than blaming its name or format.
     static final class TooLargeException extends IOException
     {
         TooLargeException(int width, int height)
@@ -201,15 +178,11 @@ final class AnimatedImage
         }
     }
 
-    /**
-     * Load an image file, decoding all frames if it is an animated GIF. Frames
-     * are downscaled to {@code maxDimension} on their longest side; pass 0 to
-     * leave the size untouched. Returns null when no ImageIO reader recognises
-     * the file, and throws {@link TooLargeException} when the source, or any
-     * frame of a GIF, holds more than {@link #MAX_DECODE_PIXELS} pixels. A GIF
-     * whose declared canvas is
-     * too large loads as its first frame only.
-     */
+    // Load an image file, decoding all frames if it is an animated GIF. Frames are downscaled to
+    // maxDimension on their longest side; pass 0 to leave the size untouched. Returns null when no
+    // ImageIO reader recognises the file, and throws TooLargeException when the source, or any
+    // frame of a GIF, holds more than MAX_DECODE_PIXELS pixels. A GIF whose declared canvas is too
+    // large loads as its first frame only.
     static AnimatedImage load(Filepath file, int maxDimension) throws IOException
     {
         try (InputStream in = file.openInputStream();
@@ -250,10 +223,8 @@ final class AnimatedImage
         }
     }
 
-    /**
-     * The frame to show {@code elapsedMs} after the animation started; the
-     * animation loops. Static images always return their only frame.
-     */
+    // The frame to show elapsedMs after the animation started; the animation loops. Static images
+    // always return their only frame.
     BufferedImage frameAt(long elapsedMs)
     {
         if (frames.length == 1 || totalDurationMs <= 0)
@@ -285,14 +256,11 @@ final class AnimatedImage
         return frames[0].getHeight();
     }
 
-    /**
-     * Composite a multi-frame GIF into standalone full frames. GIF frames are
-     * often partial diffs positioned inside a logical screen, so each frame is
-     * drawn onto a persistent canvas and the canvas snapshotted, honouring the
-     * frame's disposal method before the next one. Returns null when the
-     * declared canvas is above {@link #MAX_GIF_CANVAS_PIXELS}, leaving the
-     * caller to fall back to a single frame.
-     */
+    // Composite a multi-frame GIF into standalone full frames. GIF frames are often partial diffs
+    // positioned inside a logical screen, so each frame is drawn onto a persistent canvas and the
+    // canvas snapshotted, honouring the frame's disposal method before the next one. Returns null
+    // when the declared canvas is above MAX_GIF_CANVAS_PIXELS, leaving the caller to fall back to a
+    // single frame.
     private static AnimatedImage decodeGif(ImageReader reader, int maxDimension)
         throws IOException
     {

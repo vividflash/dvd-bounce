@@ -45,99 +45,73 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 @Slf4j
 public class DvdBounceOverlay extends Overlay
 {
-    /**
-     * Hue step per bounce, as a fraction of a full turn (47 degrees, close to
-     * the colour change of the classic DVD screensaver).
-     */
+    // Hue step per bounce, as a fraction of a full turn (47 degrees, close to the colour change of
+    // the classic DVD screensaver).
     private static final float HUE_STEP = 47f / 360f;
 
-    /**
-     * Steps after which the hue is back where it started. 47 and 360 share no
-     * factors, so the cycle is exactly 360 steps; wrapping the step counter
-     * there also keeps it clear of int overflow after a long frame gap.
-     */
+    // Steps after which the hue is back where it started. 47 and 360 share no factors, so the cycle
+    // is exactly 360 steps; wrapping the step counter there also keeps it clear of int overflow
+    // after a long frame gap.
     private static final int HUE_CYCLE_STEPS = 360;
 
-    /**
-     * Shortest gap between two hue recomputes. A hue rotation walks every pixel
-     * of the draw-size image, so when the travel distance drops below one frame
-     * step and the image bounces on every frame, this caps the cost. Bounces
-     * further apart than this are unaffected.
-     */
+    // Shortest gap between two hue recomputes. A hue rotation walks every pixel of the draw-size
+    // image, so when the travel distance drops below one frame step and the image bounces on every
+    // frame, this caps the cost. Bounces further apart than this are unaffected.
     private static final long TINT_MIN_INTERVAL_MS = 50L;
 
-    /** Draw size floor, in case a profile holds a value outside the config range. */
+    // Draw size floor, in case a profile holds a value outside the config range.
     private static final int MIN_DRAW_SIZE = 1;
 
-    /** Opacity is a percentage, and this value is fully opaque. */
+    // Opacity is a percentage, and this value is fully opaque.
     private static final int FULL_OPACITY = 100;
 
-    /**
-     * How long after a world hop completes before motion resumes, giving the
-     * client a moment to settle.
-     */
+    // How long after a world hop completes before motion resumes, giving the client a moment to
+    // settle.
     private static final long RESUME_GRACE_MS = 1200L;
 
-    /**
-     * A frame this far off the smoothed interval is treated as a change of
-     * frame rate rather than jitter around the current one, so it moves by its
-     * own length instead of the smoothed one. The uneven frame times a cap
-     * produces while holding one target land inside this band. A large change
-     * such as 144 to 60 lands outside it and is followed at once; a small one
-     * such as 60 to 50 is inside it and is followed over the next second of
-     * frames instead.
-     */
+    // A frame this far off the smoothed interval is treated as a change of frame rate rather than
+    // jitter around the current one, so it moves by its own length instead of the smoothed one. The
+    // uneven frame times a cap produces while holding one target land inside this band. A large
+    // change such as 144 to 60 lands outside it and is followed at once; a small one such as 60 to
+    // 50 is inside it and is followed over the next second of frames instead.
     private static final double STEADY_LOW = 0.75;
     private static final double STEADY_HIGH = 1.33;
 
-    /**
-     * Frames longer than this are a freeze, a hop or a resumed laptop, not a
-     * frame rate. They move by their true length and leave the smoothed
-     * interval alone.
-     */
+    // Frames longer than this are a freeze, a hop or a resumed laptop, not a frame rate. They move
+    // by their true length and leave the smoothed interval alone.
     private static final double MAX_TRACKED_SECONDS = 0.25;
 
     private final Client client;
     private final DvdBouncePlugin plugin;
     private final DvdBounceConfig config;
 
-    /**
-     * The two pictures. Each keeps its own position, direction, hue and image
-     * caches, so they cross the screen independently, and each reads its own
-     * half of the config. They start well apart and head opposite ways, so two
-     * pictures of the same size never travel as one.
-     */
+    // The two pictures. Each keeps its own position, direction, hue and image caches, so they cross
+    // the screen independently, and each reads its own half of the config. They start well apart
+    // and head opposite ways, so two pictures of the same size never travel as one.
     private final Picture itemPicture;
     private final Picture customPicture;
 
     private long lastFrameNanos;
     private boolean hasLastFrame;
 
-    /**
-     * Smoothed frame interval (EMA), used to pick the draw mode. At the
-     * standard ~60 fps the speed presets advance in whole pixels, so crisp
-     * integer positions are ideal. On higher frame rates (GPU/117HD unlocked
-     * fps, custom targets like 72) frames no longer align with pixel steps,
-     * so the image is drawn at sub-pixel positions with bilinear filtering
-     * instead. Measuring the real frame time covers every fps source without
-     * reading other plugins' config; hysteresis stops the mode flapping.
-     */
+    // Smoothed frame interval (EMA), used to pick the draw mode. At the standard ~60 fps the speed
+    // presets advance in whole pixels, so crisp integer positions are ideal. On higher frame rates
+    // (GPU/117HD unlocked fps, custom targets like 72) frames no longer align with pixel steps, so
+    // the image is drawn at sub-pixel positions with bilinear filtering instead. Measuring the real
+    // frame time covers every fps source without reading other plugins' config; hysteresis stops
+    // the mode flapping.
     private double avgFrameSeconds;
     private boolean subPixel;
     private Dimension bounds;
 
-    /**
-     * While paused both pictures freeze in place: position, animation frame and
-     * hue stop advancing, so the overlay does no work beyond the cached blits.
-     */
+    // While paused both pictures freeze in place: position, animation frame and hue stop advancing,
+    // so the overlay does no work beyond the cached blits.
     private boolean paused;
     private long resumeAtMs = Long.MAX_VALUE;
     private long pausedClockMs;
 
-    /**
-     * Time spent paused, taken off the animation clock so an animated picture
-     * resumes on the frame it froze on rather than skipping the pause.
-     */
+    // Time spent paused, taken off the animation clock so an animated picture resumes on the frame
+    // it froze on rather than skipping the pause.
     private long pausedTotalMs;
 
     @Inject
@@ -237,11 +211,9 @@ public class DvdBounceOverlay extends Overlay
         return bounds;
     }
 
-    /**
-     * Seconds since the previous frame, and 0 while paused or on the first
-     * frame after the timer is reset. nanoTime is monotonic within a JVM, but
-     * the max() means a backwards step could never drive a position negative.
-     */
+    // Seconds since the previous frame, and 0 while paused or on the first frame after the timer is
+    // reset. nanoTime is monotonic within a JVM, but the max() means a backwards step could never
+    // drive a position negative.
     private double frameSeconds()
     {
         long now = System.nanoTime();
@@ -251,13 +223,10 @@ public class DvdBounceOverlay extends Overlay
         return dt;
     }
 
-    /**
-     * Reset the run state that must not survive a plugin toggle: the pause
-     * flags, the frame timer and the measured frame rate. The overlay is a
-     * singleton, so a pause captured mid-hop would otherwise still be set on
-     * the next start. Position, direction and hue are deliberately kept, so
-     * each picture carries on from where it was rather than jumping.
-     */
+    // Reset the run state that must not survive a plugin toggle: the pause flags, the frame timer
+    // and the measured frame rate. The overlay is a singleton, so a pause captured mid-hop would
+    // otherwise still be set on the next start. Position, direction and hue are deliberately kept,
+    // so each picture carries on from where it was rather than jumping.
     void resetState()
     {
         paused = false;
@@ -268,10 +237,8 @@ public class DvdBounceOverlay extends Overlay
         subPixel = false;
     }
 
-    /**
-     * Drop the pre-scaled and tinted frame caches so a disabled plugin pins
-     * no image memory. Called from the plugin's shutDown.
-     */
+    // Drop the pre-scaled and tinted frame caches so a disabled plugin pins no image memory. Called
+    // from the plugin's shutDown.
     void clearImageCaches()
     {
         itemPicture.clearCaches();
@@ -290,21 +257,16 @@ public class DvdBounceOverlay extends Overlay
         customPicture.clearCaches();
     }
 
-    /**
-     * Milliseconds from the monotonic clock. Used for the animation clock and
-     * pause/resume timers instead of the wall clock, which can jump around
-     * NTP corrections; the epoch is arbitrary but all users only ever compare
-     * differences.
-     */
+    // Milliseconds from the monotonic clock. Used for the animation clock and pause/resume timers
+    // instead of the wall clock, which can jump around NTP corrections; the epoch is arbitrary but
+    // all users only ever compare differences.
     private static long monotonicMs()
     {
         return System.nanoTime() / 1_000_000L;
     }
 
-    /**
-     * The draw mode for this frame: the FPS mode config forces crisp or
-     * smooth outright; Adaptive follows the measured frame rate.
-     */
+    // The draw mode for this frame: the FPS mode config forces crisp or smooth outright; Adaptive
+    // follows the measured frame rate.
     private boolean useSubPixel(FpsMode fpsMode)
     {
         switch (fpsMode)
@@ -318,22 +280,17 @@ public class DvdBounceOverlay extends Overlay
         }
     }
 
-    /**
-     * How far to move this frame, and the upkeep of the smoothed interval it
-     * comes from.
-     *
-     * <p>While the frame rate holds, every frame moves by the smoothed interval
-     * rather than by its own, so the pixel steps stay even and crisp rendering
-     * has nothing uneven to round. Frame times are never exact: an fps cap
-     * sleeps in whole milliseconds and the scheduler adds its own noise, and
-     * with a raw interval that noise becomes visible judder at whole-pixel
-     * positions.
-     *
-     * <p>A frame outside the steady band moves by its true length, so a real
-     * gap is still covered exactly, and pulls the average halfway to itself so
-     * a new frame rate is followed within a few frames rather than drifted
-     * toward. That is what a foreground to background fps switch looks like.
-     */
+    // How far to move this frame, and the upkeep of the smoothed interval it comes from.
+    //
+    // While the frame rate holds, every frame moves by the smoothed interval rather than by its
+    // own, so the pixel steps stay even and crisp rendering has nothing uneven to round. Frame
+    // times are never exact: an fps cap sleeps in whole milliseconds and the scheduler adds its own
+    // noise, and with a raw interval that noise becomes visible judder at whole-pixel positions.
+    //
+    // A frame outside the steady band moves by its true length, so a real gap is still covered
+    // exactly, and pulls the average halfway to itself so a new frame rate is followed within a few
+    // frames rather than drifted toward. That is what a foreground to background fps switch looks
+    // like.
     private double stepSeconds(double dt)
     {
         if (dt <= 0 || dt > MAX_TRACKED_SECONDS)
@@ -354,11 +311,8 @@ public class DvdBounceOverlay extends Overlay
         return avgFrameSeconds;
     }
 
-    /**
-     * Flip between crisp integer rendering (~60 fps and below) and sub-pixel
-     * rendering (above) from the smoothed frame rate, with hysteresis so the
-     * mode does not flap around the threshold.
-     */
+    // Flip between crisp integer rendering (~60 fps and below) and sub-pixel rendering (above) from
+    // the smoothed frame rate, with hysteresis so the mode does not flap around the threshold.
     private void updateDrawMode()
     {
         if (avgFrameSeconds <= 0)
@@ -376,10 +330,8 @@ public class DvdBounceOverlay extends Overlay
         }
     }
 
-    /**
-     * Freeze both pictures where they are. Repeated calls (hop -> login states)
-     * keep them paused; the pending resume, if any, is cancelled.
-     */
+    // Freeze both pictures where they are. Repeated calls (hop -> login states) keep them paused;
+    // the pending resume, if any, is cancelled.
     void pause()
     {
         if (!paused)
@@ -391,10 +343,8 @@ public class DvdBounceOverlay extends Overlay
         resumeAtMs = Long.MAX_VALUE;
     }
 
-    /**
-     * Arm the delayed resume after a completed hop/login. Only the first
-     * LOGGED_IN after a pause arms it; harmless no-op while unpaused.
-     */
+    // Arm the delayed resume after a completed hop/login. Only the first LOGGED_IN after a pause
+    // arms it; harmless no-op while unpaused.
     void scheduleResume()
     {
         if (paused && resumeAtMs == Long.MAX_VALUE)
@@ -407,13 +357,10 @@ public class DvdBounceOverlay extends Overlay
         }
     }
 
-    /**
-     * Advance one axis by {@code step} along its edge-reflected path.
-     * {@code state} holds {position, direction} and is updated in place;
-     * returns how many edge bounces the step crossed. The reflected path is a
-     * triangle wave with period {@code 2 * travel}, so any distance folds in
-     * exactly regardless of how many reflections it spans.
-     */
+    // Advance one axis by step along its edge-reflected path. state holds {position, direction} and
+    // is updated in place; returns how many edge bounces the step crossed. The reflected path is a
+    // triangle wave with period 2 * travel, so any distance folds in exactly regardless of how many
+    // reflections it spans.
     private static int fold(double[] state, double travel, double step)
     {
         if (travel <= 0)
@@ -470,12 +417,9 @@ public class DvdBounceOverlay extends Overlay
         return out;
     }
 
-    /**
-     * One bouncing picture: where it is, which way it is going, how far its
-     * hue has turned, and the frames it has prepared at the current draw size.
-     * Its settings come in with each frame, so the same class serves the item
-     * and the custom image without knowing which it is drawing.
-     */
+    // One bouncing picture: where it is, which way it is going, how far its hue has turned, and the
+    // frames it has prepared at the current draw size. Its settings come in with each frame, so the
+    // same class serves the item and the custom image without knowing which it is drawing.
     private static final class Picture
     {
         private final double startFractionX;
@@ -492,30 +436,22 @@ public class DvdBounceOverlay extends Overlay
         private final double[] foldState = new double[2];
         private final AffineTransform translation = new AffineTransform();
 
-        /**
-         * Hue rotation to apply, counted in {@link #HUE_STEP} units and wrapped
-         * at {@link #HUE_CYCLE_STEPS}. A corner hit reflects both axes at once
-         * and so advances two steps, which is what "a step per edge" works out
-         * to.
-         */
+        // Hue rotation to apply, counted in HUE_STEP units and wrapped at HUE_CYCLE_STEPS. A corner
+        // hit reflects both axes at once and so advances two steps, which is what "a step per edge"
+        // works out to.
         private int hueStep;
 
-        /**
-         * Source frames pre-scaled to the current draw size and carrying the
-         * configured opacity, so each animation frame is resized and faded once
-         * instead of on every render.
-         */
+        // Source frames pre-scaled to the current draw size and carrying the configured opacity, so
+        // each animation frame is resized and faded once instead of on every render.
         private final Map<BufferedImage, BufferedImage> scaledFrames = new HashMap<>();
         private AnimatedImage scaledSource;
         private int scaledWidth;
         private int scaledHeight;
         private int scaledOpacity = FULL_OPACITY;
 
-        /**
-         * Tinted copies of the draw-size frames for the current hue, so an
-         * animated source is hue-rotated once per hue change instead of on
-         * every frame swap, and only over draw-size pixels.
-         */
+        // Tinted copies of the draw-size frames for the current hue, so an animated source is
+        // hue-rotated once per hue change instead of on every frame swap, and only over draw-size
+        // pixels.
         private final Map<BufferedImage, BufferedImage> tintedFrames = new HashMap<>();
         private int tintedStep = -1;
         private long tintedAtMs;
@@ -613,12 +549,9 @@ public class DvdBounceOverlay extends Overlay
             tintedStep = -1;
         }
 
-        /**
-         * Move along the 45-degree path, folding the travelled distance exactly
-         * into the reflected path. A gap between frames, from a world hop, a
-         * client freeze or a laptop resume, puts the picture where it would be
-         * had it kept moving the whole time, bounces included.
-         */
+        // Move along the 45-degree path, folding the travelled distance exactly into the reflected
+        // path. A gap between frames, from a world hop, a client freeze or a laptop resume, puts
+        // the picture where it would be had it kept moving the whole time, bounces included.
         private void advancePosition(int travelWidth, int travelHeight, BounceSpeed speed,
             double dt)
         {
@@ -653,14 +586,11 @@ public class DvdBounceOverlay extends Overlay
             hueStep = (int) ((hueStep + (long) bouncesX + bouncesY) % HUE_CYCLE_STEPS);
         }
 
-        /**
-         * The given frame pre-scaled to the current draw size and faded to the
-         * configured opacity, computed once per frame and cached until the
-         * source image, draw size or opacity changes. Baking the fade in here
-         * keeps the render itself a plain draw at any opacity. The tint cache
-         * is keyed by these scaled frames, so it resets alongside, and the hue
-         * rotation carries the alpha through untouched.
-         */
+        // The given frame pre-scaled to the current draw size and faded to the configured opacity,
+        // computed once per frame and cached until the source image, draw size or opacity changes.
+        // Baking the fade in here keeps the render itself a plain draw at any opacity. The tint
+        // cache is keyed by these scaled frames, so it resets alongside, and the hue rotation
+        // carries the alpha through untouched.
         private BufferedImage scaledFor(AnimatedImage source, BufferedImage frame, int width,
             int height, int opacity)
         {
@@ -707,14 +637,11 @@ public class DvdBounceOverlay extends Overlay
             return scaled;
         }
 
-        /**
-         * The draw-size frame with the current hue rotation applied. The cache
-         * is dropped when the hue moves on, but no more often than
-         * {@link #TINT_MIN_INTERVAL_MS}, so a bounce on every frame cannot make
-         * this walk the image pixels 60 times a second. A negative
-         * {@link #tintedStep} means no tint is cached yet and the interval does
-         * not apply, since the monotonic clock's epoch is arbitrary.
-         */
+        // The draw-size frame with the current hue rotation applied. The cache is dropped when the
+        // hue moves on, but no more often than TINT_MIN_INTERVAL_MS, so a bounce on every frame
+        // cannot make this walk the image pixels 60 times a second. A negative tintedStep means no
+        // tint is cached yet and the interval does not apply, since the monotonic clock's epoch is
+        // arbitrary.
         private BufferedImage tintedFor(BufferedImage source, long nowMs, boolean scaledFromTinted)
         {
             if (tintedStep != hueStep
